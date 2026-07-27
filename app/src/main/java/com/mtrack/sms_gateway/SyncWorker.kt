@@ -21,7 +21,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         val message = inputData.getString("message") ?: ""
         val deviceId = "${Build.MANUFACTURER}_${Build.MODEL}"
 
+        // ওয়েবহুক ইউআরএল বা মেসেজ ফাঁকা থাকলে এক্সিকিউশন বাতিল করবে
         if (webhookUrl.isEmpty() || message.isEmpty()) {
+            Log.e("SyncWorker", "Sync aborted: Webhook URL or Message is empty.")
             return Result.failure()
         }
 
@@ -31,7 +33,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .readTimeout(15, TimeUnit.SECONDS)
                 .build()
 
-            // Header এর পাশাপাশি POST Body তেও api_key দেওয়া হলো যেন cPanel হেডার ব্লক করলেও সমস্যা না হয়
+            // Header-এর পাশাপাশি POST Body তেও api_key দেওয়া হলো যাতে cPanel কাস্টম হেডার ফিল্টার করলেও সমস্যা না হয়
             val formBody = FormBody.Builder()
                 .add("api_key", apiKey)
                 .add("sender", sender)
@@ -48,15 +50,18 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
 
-            Log.d("SyncWorker", "Server Response: $responseBody")
+            Log.d("SyncWorker", "Server Response Code: ${response.code}")
+            Log.d("SyncWorker", "Server Response Body: $responseBody")
 
             return if (response.isSuccessful) {
+                Log.d("SyncWorker", "SMS synced successfully!")
                 Result.success()
             } else {
+                Log.w("SyncWorker", "Server returned non-200 code. Retrying later...")
                 Result.retry()
             }
         } catch (e: Exception) {
-            Log.e("SyncWorker", "Error sending SMS: ${e.message}")
+            Log.e("SyncWorker", "Error sending SMS sync request: ${e.message}", e)
             return Result.retry()
         }
     }
