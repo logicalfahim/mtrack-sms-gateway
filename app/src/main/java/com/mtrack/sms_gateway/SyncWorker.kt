@@ -31,7 +31,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .readTimeout(15, TimeUnit.SECONDS)
                 .build()
 
+            // Header এর পাশাপাশি POST Body তেও api_key দেওয়া হলো যেন cPanel হেডার ব্লক করলেও সমস্যা না হয়
             val formBody = FormBody.Builder()
+                .add("api_key", apiKey)
                 .add("sender", sender)
                 .add("message", message)
                 .add("device_id", deviceId)
