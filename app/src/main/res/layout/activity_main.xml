@@ -12,7 +12,7 @@
         android:text="M-Track SMS Gateway"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="20dp" />
 
     <EditText
         android:id="@+id/etWebhookUrl"
@@ -28,28 +28,47 @@
         android:layout_height="wrap_content"
         android:hint="Secret API Key (X-API-KEY)"
         android:inputType="text"
-        android:layout_marginBottom="20dp" />
+        android:layout_marginBottom="16dp" />
 
     <Button
         android:id="@+id/btnSave"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Save Configuration"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="20dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#CCCCCC"
+        android:layout_marginBottom="20dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Manual Bulk Sync:"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
+
+    <Spinner
+        android:id="@+id/spSyncDays"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"/>
 
     <Button
         android:id="@+id/btnSyncNow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Test Connection"
+        android:text="Sync Old SMS Now"
         style="?attr/materialButtonOutlinedStyle"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="20dp" />
 
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Status: Active and Listening for SMS..."
+        android:text="Status: Active and Listening..."
         android:textColor="#2E7D32"
         android:textSize="14sp" />
 
