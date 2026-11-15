@@ -1,7 +1,13 @@
 package com.mtrack.sms_gateway
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
@@ -17,15 +23,28 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         val webhookUrl = prefs.getString("webhook_url", "https://erp.mtrack.com.bd/api/webhook.php") ?: ""
         val apiKey = prefs.getString("api_key", "MTRACK_SMS_SECURE_TOKEN_2026") ?: ""
 
+        val action = inputData.getString("action") ?: "sync"
         val sender = inputData.getString("sender") ?: ""
         val message = inputData.getString("message") ?: ""
-        val deviceId = "${Build.MANUFACTURER}_${Build.MODEL}"
+        val platform = inputData.getString("platform") ?: "SMS"
+        val simSlot = inputData.getInt("sim_slot", 1)
 
-        // ওয়েবহুক ইউআরএল বা মেসেজ ফাঁকা থাকলে এক্সিকিউশন বাতিল করবে
+        val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+        val androidId = try {
+            Settings.Secure.getString(applicationContext.contentResolver, Settings.Secure.ANDROID_ID) ?: deviceModel
+        } catch (e: Exception) {
+            deviceModel
+        }
+
         if (webhookUrl.isEmpty() || message.isEmpty()) {
-            Log.e("SyncWorker", "Sync aborted: Webhook URL or Message is empty.")
+            Log.e("SyncWorker", "Aborted: Webhook URL or Message is empty.")
+            GatewayLogger.log(applicationContext, "Sync aborted: URL or message empty", "FAILED", platform)
             return Result.failure()
         }
+
+        val batteryLevel = getBatteryLevel(applicationContext)
+        val isCharging = isDeviceCharging(applicationContext)
+        val networkType = getNetworkType(applicationContext)
 
         try {
             val client = OkHttpClient.Builder()
@@ -33,36 +52,87 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .readTimeout(15, TimeUnit.SECONDS)
                 .build()
 
-            // Header-এর পাশাপাশি POST Body তেও api_key দেওয়া হলো যাতে cPanel কাস্টম হেডার ফিল্টার করলেও সমস্যা না হয়
             val formBody = FormBody.Builder()
                 .add("api_key", apiKey)
+                .add("action", action)
                 .add("sender", sender)
                 .add("message", message)
-                .add("device_id", deviceId)
+                .add("platform", platform)
+                .add("sim_slot", simSlot.toString())
+                .add("device_id", androidId)
+                .add("device_name", deviceModel)
+                .add("battery_level", batteryLevel.toString())
+                .add("is_charging", if (isCharging) "1" else "0")
+                .add("network_type", networkType)
                 .build()
 
             val request = Request.Builder()
                 .url(webhookUrl)
                 .addHeader("X-API-KEY", apiKey)
+                .addHeader("User-Agent", "MTrack-SMS-Gateway/2.0 (Android)")
                 .post(formBody)
                 .build()
 
             val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
+            val code = response.code
+            val responseBody = response.body?.string() ?: ""
 
-            Log.d("SyncWorker", "Server Response Code: ${response.code}")
-            Log.d("SyncWorker", "Server Response Body: $responseBody")
+            Log.d("SyncWorker", "Server Response: HTTP $code | $responseBody")
 
             return if (response.isSuccessful) {
-                Log.d("SyncWorker", "SMS synced successfully!")
+                if (action == "heartbeat") {
+                    GatewayLogger.log(applicationContext, "Heartbeat acknowledged (HTTP $code)", "SUCCESS", "SYSTEM")
+                } else if (action == "test_ping") {
+                    GatewayLogger.log(applicationContext, "Test ping verified (HTTP $code)", "SUCCESS", "SYSTEM")
+                } else {
+                    GatewayLogger.log(applicationContext, "Synced: $sender (HTTP $code)", "SUCCESS", platform)
+                }
                 Result.success()
             } else {
-                Log.w("SyncWorker", "Server returned non-200 code. Retrying later...")
+                GatewayLogger.log(applicationContext, "Server error: HTTP $code ($sender)", "FAILED", platform)
                 Result.retry()
             }
         } catch (e: Exception) {
-            Log.e("SyncWorker", "Error sending SMS sync request: ${e.message}", e)
+            Log.e("SyncWorker", "Network Error: ${e.message}", e)
+            GatewayLogger.log(applicationContext, "Network Failed: ${e.localizedMessage ?: "Timeout"}", "FAILED", platform)
             return Result.retry()
+        }
+    }
+
+    private fun getBatteryLevel(context: Context): Int {
+        return try {
+            val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    private fun isDeviceCharging(context: Context): Boolean {
+        return try {
+            val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun getNetworkType(context: Context): String {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return "OFFLINE"
+            val capabilities = cm.getNetworkCapabilities(network) ?: return "UNKNOWN"
+            when {
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular (4G/5G)"
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+                else -> "Connected"
+            }
+        } catch (e: Exception) {
+            "Unknown"
         }
     }
 }

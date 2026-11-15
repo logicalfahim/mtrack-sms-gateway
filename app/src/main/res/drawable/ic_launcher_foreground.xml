@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:translateX="10.8"
+        android:translateY="10.8">
+        <!-- Outer Shield -->
+        <path
+            android:fillColor="#2563EB"
+            android:pathData="M54,14 L84,26 C84,54 69,76 54,84 C39,76 24,54 24,26 Z" />
+        <!-- Inner Shield Highlight -->
+        <path
+            android:fillColor="#3B82F6"
+            android:pathData="M54,18 L80,28.5 C80,52.5 67,72 54,79 L54,18 Z" />
+        <!-- SMS Chat Bubble Inside -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M39,36 h30 c3.3,0 6,2.7 6,6 v16 c0,3.3 -2.7,6 -6,6 h-18 l-8,7 v-7 h-4 c-3.3,0 -6,-2.7 -6,-6 v-16 c0,-3.3 2.7,-6 6,-6 z" />
+        <!-- Digital Signal / Relay Arrow -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M49,45 L59,45 L53,55 L61,55 L47,65 L50,56 L43,56 Z" />
+    </group>
+</vector>
