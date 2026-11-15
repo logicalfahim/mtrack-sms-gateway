@@ -27,6 +27,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         val sender = inputData.getString("sender") ?: ""
         val message = inputData.getString("message") ?: ""
         val platform = inputData.getString("platform") ?: "SMS"
+        val type = inputData.getString("type") ?: "Receive Money"
+        val smsDate = inputData.getString("sms_date") ?: ""
+        val smsTimestamp = inputData.getString("sms_timestamp") ?: ""
         val simSlot = inputData.getInt("sim_slot", 1)
 
         val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
@@ -58,6 +61,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .add("sender", sender)
                 .add("message", message)
                 .add("platform", platform)
+                .add("type", type)
+                .add("sms_date", smsDate)
+                .add("sms_timestamp", smsTimestamp)
                 .add("sim_slot", simSlot.toString())
                 .add("device_id", androidId)
                 .add("device_name", deviceModel)

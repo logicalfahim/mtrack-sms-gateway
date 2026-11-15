@@ -8,6 +8,9 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -17,6 +20,7 @@ class SmsReceiver : BroadcastReceiver() {
             
             // Detect SIM Slot / Subscription ID from extras
             val simSlot = detectSimSlot(intent)
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
             for (sms in messages) {
                 val sender = sms.displayOriginatingAddress ?: ""
@@ -24,12 +28,16 @@ class SmsReceiver : BroadcastReceiver() {
 
                 if (sender.isEmpty() || messageBody.isEmpty()) continue
 
-                val platform = detectPlatform(sender, messageBody)
+                val timestamp = if (sms.timestampMillis > 0) sms.timestampMillis else System.currentTimeMillis()
+                val formattedDate = dateFormat.format(Date(timestamp))
 
-                Log.d("SmsReceiver", "SMS Received from: $sender [SIM $simSlot, Platform: $platform]")
+                val platform = detectPlatform(sender, messageBody)
+                val type = detectType(messageBody)
+
+                Log.d("SmsReceiver", "SMS Received: $sender [$platform, Type: $type, Date: $formattedDate, SIM: $simSlot]")
                 GatewayLogger.log(
                     context,
-                    "SMS Detected: $sender (SIM $simSlot)",
+                    "SMS ($platform • $type): $sender",
                     "INFO",
                     platform
                 )
@@ -38,7 +46,11 @@ class SmsReceiver : BroadcastReceiver() {
                     .putString("sender", sender)
                     .putString("message", messageBody)
                     .putString("platform", platform)
+                    .putString("type", type)
+                    .putString("sms_date", formattedDate)
+                    .putString("sms_timestamp", timestamp.toString())
                     .putInt("sim_slot", simSlot)
+                    .putString("action", "realtime_sms")
                     .build()
 
                 val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
@@ -75,8 +87,17 @@ class SmsReceiver : BroadcastReceiver() {
             s.contains("nagad") || s == "16167" || b.contains("nagad") -> "Nagad"
             s.contains("rocket") || s == "16216" || b.contains("rocket") || s.contains("dbbl") -> "Rocket"
             s.contains("upay") || b.contains("upay") -> "Upay"
-            b.contains("trxid") || b.contains("trans id") -> "Payment"
+            b.contains("trxid") || b.contains("txnid") -> "Payment"
             else -> "SMS"
+        }
+    }
+
+    private fun detectType(body: String): String {
+        val b = body.lowercase()
+        return when {
+            b.contains("cash in") || b.contains("cash-in") -> "Cash In"
+            b.contains("merchant") || b.contains("payment to") || b.contains("payment tk") -> "Merchant"
+            else -> "Receive Money"
         }
     }
 }

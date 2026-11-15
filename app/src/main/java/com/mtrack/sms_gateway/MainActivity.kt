@@ -37,7 +37,10 @@ import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.material.switchmaterial.SwitchMaterial
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -70,8 +73,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var llBatteryBanner: LinearLayout
     private lateinit var btnFixBattery: Button
 
-    private val daysOptions = arrayOf("Last 1 Day", "Last 3 Days", "Last 7 Days", "Last 15 Days", "Last 30 Days")
-    private val daysValues = arrayOf(1, 3, 7, 15, 30)
+    private val daysOptions = arrayOf(
+        "This Month (চলতি মাস)",
+        "Last 1 Day",
+        "Last 3 Days",
+        "Last 7 Days",
+        "Last 15 Days",
+        "Last 30 Days",
+        "All Payment SMS"
+    )
 
     // Broadcast receiver for real-time log updates
     private val logReceiver = object : BroadcastReceiver() {
@@ -210,9 +220,8 @@ class MainActivity : AppCompatActivity() {
 
         // Manual Historical Sync
         btnSyncNow.setOnClickListener {
-            val selectedDaysIndex = spSyncDays.selectedItemPosition
-            val daysToSync = daysValues[selectedDaysIndex]
-            syncOldSMS(daysToSync)
+            val selectedIndex = spSyncDays.selectedItemPosition
+            syncHistoricalSMS(selectedIndex)
         }
 
         // Logs Actions
@@ -326,37 +335,99 @@ class MainActivity : AppCompatActivity() {
         tvTerminalLogs.text = builder
     }
 
-    private fun syncOldSMS(days: Int) {
+    private fun syncHistoricalSMS(optionIndex: Int) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "READ_SMS permission is required!", Toast.LENGTH_SHORT).show()
             return
         }
 
         pbSyncProgress.visibility = View.VISIBLE
+
         val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_YEAR, -days)
-        val timeInMillis = calendar.timeInMillis
+        val timeInMillis: Long
+        val label: String
+
+        when (optionIndex) {
+            0 -> {
+                // This Month (চলতি মাসের ১ তারিখ ০০:০০:০০ থেকে)
+                calendar.set(Calendar.DAY_OF_MONTH, 1)
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                timeInMillis = calendar.timeInMillis
+                label = "This Month (চলতি মাস)"
+            }
+            1 -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -1)
+                timeInMillis = calendar.timeInMillis
+                label = "Last 1 Day"
+            }
+            2 -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -3)
+                timeInMillis = calendar.timeInMillis
+                label = "Last 3 Days"
+            }
+            3 -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -7)
+                timeInMillis = calendar.timeInMillis
+                label = "Last 7 Days"
+            }
+            4 -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -15)
+                timeInMillis = calendar.timeInMillis
+                label = "Last 15 Days"
+            }
+            5 -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -30)
+                timeInMillis = calendar.timeInMillis
+                label = "Last 30 Days"
+            }
+            else -> {
+                timeInMillis = 0L
+                label = "All Payment SMS"
+            }
+        }
 
         val cursor: Cursor? = contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
             arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
-            "${Telephony.Sms.DATE} >= ?",
-            arrayOf(timeInMillis.toString()),
+            if (timeInMillis > 0) "${Telephony.Sms.DATE} >= ?" else null,
+            if (timeInMillis > 0) arrayOf(timeInMillis.toString()) else null,
             "${Telephony.Sms.DATE} DESC"
         )
 
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         var count = 0
+        var skippedNonPayment = 0
+
         cursor?.use {
             val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
             val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
+            val dateIdx = it.getColumnIndex(Telephony.Sms.DATE)
 
             while (it.moveToNext()) {
                 val sender = it.getString(addressIdx) ?: ""
                 val body = it.getString(bodyIdx) ?: ""
+                val smsTimestamp = if (dateIdx != -1) it.getLong(dateIdx) else System.currentTimeMillis()
+
+                // Smart filter: only process payment related messages
+                if (!isPaymentMessage(sender, body)) {
+                    skippedNonPayment++
+                    continue
+                }
+
+                val platform = detectPlatform(sender, body)
+                val type = detectType(body)
+                val formattedDate = dateFormat.format(Date(smsTimestamp))
 
                 val inputData = Data.Builder()
                     .putString("sender", sender)
                     .putString("message", body)
+                    .putString("platform", platform)
+                    .putString("type", type)
+                    .putString("sms_date", formattedDate)
+                    .putString("sms_timestamp", smsTimestamp.toString())
                     .putString("action", "historical_sync")
                     .build()
 
@@ -370,8 +441,49 @@ class MainActivity : AppCompatActivity() {
         }
 
         pbSyncProgress.visibility = View.GONE
-        GatewayLogger.log(this, "Queued $count historical SMS for sync (Last $days days)", "INFO", "SYSTEM")
-        Toast.makeText(this, "Initiated sync for $count SMS from last $days day(s)", Toast.LENGTH_LONG).show()
+        GatewayLogger.log(this, "Queued $count payment SMS for $label (Filtered out $skippedNonPayment non-payment SMS)", "INFO", "SYSTEM")
+        Toast.makeText(this, "Queued $count payment SMS ($label) with original timestamps!", Toast.LENGTH_LONG).show()
+    }
+
+    private fun isPaymentMessage(sender: String, body: String): Boolean {
+        val s = sender.lowercase()
+        val b = body.lowercase()
+
+        // Senders: bKash, Nagad (16167), Rocket (16216, dbbl), Upay, etc.
+        val isKnownSender = s.contains("bkash") || s == "16247" ||
+                s.contains("nagad") || s == "16167" ||
+                s.contains("rocket") || s == "16216" || s.contains("dbbl") ||
+                s.contains("upay")
+
+        // Keywords in body: TrxID, TxnID, Cash In, Payment, Tk, Received
+        val hasPaymentKeywords = (b.contains("trxid") || b.contains("txnid") || b.contains("txn id") ||
+                b.contains("cash in") || b.contains("cash-in") || b.contains("payment") ||
+                b.contains("received tk") || b.contains("you have received")) &&
+                (b.contains("tk") || b.contains("bdt"))
+
+        return isKnownSender || hasPaymentKeywords
+    }
+
+    private fun detectPlatform(sender: String, body: String): String {
+        val s = sender.lowercase()
+        val b = body.lowercase()
+
+        return when {
+            s.contains("bkash") || s == "16247" || b.contains("bkash") -> "bKash"
+            s.contains("nagad") || s == "16167" || b.contains("nagad") -> "Nagad"
+            s.contains("rocket") || s == "16216" || b.contains("rocket") || s.contains("dbbl") -> "Rocket"
+            s.contains("upay") || b.contains("upay") -> "Upay"
+            else -> "bKash"
+        }
+    }
+
+    private fun detectType(body: String): String {
+        val b = body.lowercase()
+        return when {
+            b.contains("cash in") || b.contains("cash-in") -> "Cash In"
+            b.contains("merchant") || b.contains("payment to") || b.contains("payment tk") -> "Merchant"
+            else -> "Receive Money"
+        }
     }
 
     private fun checkBatteryOptimization() {
