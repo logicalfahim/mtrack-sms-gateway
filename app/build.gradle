@@ -41,4 +41,7 @@ dependencies {
     
     // OkHttp for API network requests
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // SwipeRefreshLayout for Pull-to-Refresh
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 }

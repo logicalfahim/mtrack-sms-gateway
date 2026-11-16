@@ -112,6 +112,29 @@ object StatementManager {
         return list
     }
 
+    fun clearFailed(context: Context): Int {
+        var removedCount = 0
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val jsonArray = JSONArray(prefs.getString(KEY_STATEMENTS, "[]") ?: "[]")
+            val newArray = JSONArray()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val status = obj.optString("status", "")
+                if (status != "FAILED" && status != "PENDING") {
+                    newArray.put(obj)
+                } else {
+                    removedCount++
+                }
+            }
+            prefs.edit().putString(KEY_STATEMENTS, newArray.toString()).apply()
+            context.sendBroadcast(Intent(ACTION_STATEMENTS_UPDATED))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return removedCount
+    }
+
     fun clear(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_STATEMENTS, "[]").apply()

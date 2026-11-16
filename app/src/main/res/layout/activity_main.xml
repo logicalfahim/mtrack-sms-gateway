@@ -491,6 +491,20 @@
                         android:text="0 records"
                         android:textColor="@color/text_secondary"
                         android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/btnClearStatements"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_chip_flat"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="🧹 Clear"
+                        android:textColor="@color/status_danger"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <!-- Search Input Box -->
@@ -656,31 +670,37 @@
                     </LinearLayout>
                 </HorizontalScrollView>
 
-                <!-- Statements List Container -->
-                <ScrollView
+                <!-- Statements List Container with Pull-To-Refresh -->
+                <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                    android:id="@+id/swipeRefreshStatements"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginTop="10dp"
-                    android:fillViewport="true"
-                    android:overScrollMode="never">
+                    android:layout_marginTop="10dp">
 
-                    <LinearLayout
-                        android:id="@+id/llStatementsContainer"
+                    <ScrollView
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
+                        android:layout_height="match_parent"
+                        android:fillViewport="true"
+                        android:overScrollMode="never">
 
-                        <TextView
-                            android:id="@+id/tvNoStatements"
+                        <LinearLayout
+                            android:id="@+id/llStatementsContainer"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:padding="32dp"
-                            android:text="No payment statements recorded yet.\nSynced SMS will appear here automatically."
-                            android:textColor="@color/text_muted"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </ScrollView>
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvNoStatements"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:padding="32dp"
+                                android:text="No payment statements recorded yet.\nSynced SMS will appear here automatically."
+                                android:textColor="@color/text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </ScrollView>
+                </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
             </LinearLayout>
 
             <!-- ============================================== -->
@@ -870,6 +890,62 @@
                             android:textColor="@color/white"
                             android:textSize="12sp"
                             app:cornerRadius="8dp" />
+                    </LinearLayout>
+
+                    <!-- Storage & Local Data Management Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="🧹 Local Data &amp; Cache Storage"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Clean locally stored statements, non-payment data, or reset local cache."
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="12dp"
+                            android:background="@color/bg_card_border" />
+
+                        <Button
+                            android:id="@+id/btnClearFailedStatements"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="42dp"
+                            android:text="Clean Failed &amp; Pending Records"
+                            android:textColor="@color/status_warning"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="@color/status_warning" />
+
+                        <Button
+                            android:id="@+id/btnClearAllStatements"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="42dp"
+                            android:layout_marginTop="8dp"
+                            android:text="Clear All Local Statements Ledger"
+                            android:textColor="@color/status_danger"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="@color/status_danger" />
                     </LinearLayout>
                 </LinearLayout>
             </ScrollView>

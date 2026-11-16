@@ -95,9 +95,11 @@ class MainActivity : AppCompatActivity() {
 
     // Statements Page Views
     private lateinit var tvStatementCount: TextView
+    private lateinit var btnClearStatements: TextView
     private lateinit var etSearchStatement: EditText
     private lateinit var llStatementsContainer: LinearLayout
     private lateinit var tvNoStatements: TextView
+    private lateinit var swipeRefreshStatements: androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
     // Date & Operator Filter Chips
     private lateinit var chipDateToday: TextView
@@ -123,10 +125,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etApiKey: EditText
     private lateinit var btnSaveSettings: Button
     private lateinit var btnTestConnectionSettings: Button
+    private lateinit var btnClearFailedStatements: Button
+    private lateinit var btnClearAllStatements: Button
 
-    // Sync Days Options
+    // Sync Days Options (Pure English)
     private val daysOptions = arrayOf(
-        "This Month (চলতি মাস)",
+        "This Month",
         "Last 1 Day",
         "Last 3 Days",
         "Last 7 Days",
@@ -161,6 +165,7 @@ class MainActivity : AppCompatActivity() {
         setupAboutPage()
 
         requestSystemPermissions()
+        checkBatteryOptimizations()
         loadConfig()
         updateDeviceTelemetry()
 
@@ -242,9 +247,15 @@ class MainActivity : AppCompatActivity() {
 
         // Statements Views
         tvStatementCount = findViewById(R.id.tvStatementCount)
+        btnClearStatements = findViewById(R.id.btnClearStatements)
         etSearchStatement = findViewById(R.id.etSearchStatement)
         llStatementsContainer = findViewById(R.id.llStatementsContainer)
         tvNoStatements = findViewById(R.id.tvNoStatements)
+        swipeRefreshStatements = findViewById(R.id.swipeRefreshStatements)
+        swipeRefreshStatements.setColorSchemeColors(ContextCompat.getColor(this, R.color.brand_primary))
+        swipeRefreshStatements.setOnRefreshListener {
+            refreshAndSyncTodayStatements()
+        }
 
         chipDateToday = findViewById(R.id.chipDateToday)
         chipDateMonth = findViewById(R.id.chipDateMonth)
@@ -267,6 +278,8 @@ class MainActivity : AppCompatActivity() {
         etApiKey = findViewById(R.id.etApiKey)
         btnSaveSettings = findViewById(R.id.btnSaveSettings)
         btnTestConnectionSettings = findViewById(R.id.btnTestConnectionSettings)
+        btnClearFailedStatements = findViewById(R.id.btnClearFailedStatements)
+        btnClearAllStatements = findViewById(R.id.btnClearAllStatements)
 
         // Spinner Setup
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, daysOptions)
@@ -454,6 +467,147 @@ class MainActivity : AppCompatActivity() {
             chipFilterFailed.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
+
+        btnClearStatements.setOnClickListener {
+            showCleanDataDialog()
+        }
+    }
+
+    private fun showCleanDataDialog() {
+        val options = arrayOf(
+            "Clean Failed & Pending Records",
+            "Clear All Local Statements History"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Manage Local Ledger Data")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val count = StatementManager.clearFailed(this)
+                        renderStatements()
+                        renderMetrics()
+                        Toast.makeText(this, "Cleaned $count failed/pending items", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> {
+                        AlertDialog.Builder(this)
+                            .setTitle("Confirm Clear")
+                            .setMessage("Are you sure you want to clear all locally cached statement records? This will not affect the ERP server.")
+                            .setPositiveButton("Clear All") { _, _ ->
+                                StatementManager.clear(this)
+                                renderStatements()
+                                renderMetrics()
+                                Toast.makeText(this, "Local statements ledger cleared", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshAndSyncTodayStatements() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            swipeRefreshStatements.isRefreshing = false
+            Toast.makeText(this, "READ_SMS permission is required", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Toast.makeText(this, "Refreshing & Syncing Today's Statements...", Toast.LENGTH_SHORT).show()
+        GatewayLogger.log(this, "Pull-to-refresh: Syncing today's payment SMS...", "INFO", "SYSTEM")
+
+        Thread {
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val todayStart = calendar.timeInMillis
+
+            val cursor: Cursor? = contentResolver.query(
+                Telephony.Sms.Inbox.CONTENT_URI,
+                arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+                "${Telephony.Sms.DATE} >= ?",
+                arrayOf(todayStart.toString()),
+                "${Telephony.Sms.DATE} ASC"
+            )
+
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            var newCount = 0
+
+            cursor?.use {
+                val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
+                val dateIdx = it.getColumnIndex(Telephony.Sms.DATE)
+
+                while (it.moveToNext()) {
+                    val sender = it.getString(addressIdx) ?: ""
+                    val body = it.getString(bodyIdx) ?: ""
+                    val smsTimestamp = if (dateIdx != -1) it.getLong(dateIdx) else System.currentTimeMillis()
+
+                    val parsed = PaymentFilter.parse(sender, body)
+                    if (parsed.isValid) {
+                        val formattedDate = dateFormat.format(Date(smsTimestamp))
+                        newCount++
+
+                        val inputData = Data.Builder()
+                            .putString("sender", sender)
+                            .putString("message", body)
+                            .putString("platform", parsed.platform)
+                            .putString("type", parsed.type)
+                            .putString("trx_id", parsed.trxId)
+                            .putString("amount", parsed.amount)
+                            .putString("sms_date", formattedDate)
+                            .putString("sms_timestamp", smsTimestamp.toString())
+                            .putString("action", "pull_refresh_sync")
+                            .build()
+
+                        val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                            .setInputData(inputData)
+                            .build()
+
+                        WorkManager.getInstance(this).enqueue(workRequest)
+
+                        StatementManager.recordStatement(
+                            context = this,
+                            trxId = parsed.trxId,
+                            platform = parsed.platform,
+                            type = parsed.type,
+                            sender = parsed.senderNumber,
+                            amount = parsed.amount,
+                            date = formattedDate,
+                            status = "PENDING",
+                            rawMessage = body
+                        )
+                    }
+                }
+            }
+
+            runOnUiThread {
+                swipeRefreshStatements.isRefreshing = false
+                renderStatements()
+                renderMetrics()
+                Toast.makeText(this, "Statements refreshed! ($newCount verified)", Toast.LENGTH_SHORT).show()
+            }
+        }.start()
+    }
+
+    private fun checkBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    // Ignored
+                }
+            }
+        }
     }
 
     private fun setupAboutPage() {
@@ -538,6 +692,27 @@ class MainActivity : AppCompatActivity() {
 
         btnTestConnectionSettings.setOnClickListener {
             triggerTestPing()
+        }
+
+        btnClearFailedStatements.setOnClickListener {
+            val count = StatementManager.clearFailed(this)
+            renderStatements()
+            renderMetrics()
+            Toast.makeText(this, "Cleaned $count failed/pending records from local ledger", Toast.LENGTH_SHORT).show()
+        }
+
+        btnClearAllStatements.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Clear Local Statements Ledger")
+                .setMessage("Are you sure you want to clear all locally cached statements? This will not affect the ERP server.")
+                .setPositiveButton("Clear All") { _, _ ->
+                    StatementManager.clear(this)
+                    renderStatements()
+                    renderMetrics()
+                    Toast.makeText(this, "Local statements ledger cleared", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
     }
 
@@ -696,7 +871,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             tvType.text = st.type
-            tvAmount.text = "৳ ${st.amount}"
+            tvAmount.text = "Tk ${st.amount}"
             tvTrxId.text = st.trxId
             tvSender.text = if (st.sender.isNotEmpty()) st.sender else "N/A"
             tvDate.text = st.date
@@ -941,7 +1116,7 @@ class MainActivity : AppCompatActivity() {
                 mainHandler.post {
                     pbSyncDialog.progress = current
                     tvProgressPercent.text = "$percent%"
-                    tvProgressItem.text = "$current / $total • ${item.parsed.platform} ৳${item.parsed.amount} [${item.parsed.trxId}]"
+                    tvProgressItem.text = "$current / $total • ${item.parsed.platform} Tk ${item.parsed.amount} [${item.parsed.trxId}]"
                 }
 
                 try {

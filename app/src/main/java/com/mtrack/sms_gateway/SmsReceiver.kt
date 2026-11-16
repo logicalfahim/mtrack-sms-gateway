@@ -43,7 +43,7 @@ class SmsReceiver : BroadcastReceiver() {
                 // Immediately log in Live Terminal
                 GatewayLogger.log(
                     context,
-                    "${parsed.platform} (${parsed.type}): ৳${parsed.amount} [Trx: ${parsed.trxId}]",
+                    "${parsed.platform} (${parsed.type}): Tk ${parsed.amount} [Trx: ${parsed.trxId}]",
                     "INFO",
                     parsed.platform
                 )

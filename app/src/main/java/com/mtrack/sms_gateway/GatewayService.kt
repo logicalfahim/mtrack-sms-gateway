@@ -66,6 +66,29 @@ class GatewayService : android.app.Service() {
         GatewayLogger.log(this, "Gateway Service stopped", "WARNING", "SYSTEM")
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val prefs = getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("service_enabled", true)) {
+            val restartIntent = Intent(applicationContext, GatewayService::class.java).apply {
+                setPackage(packageName)
+            }
+            val restartPendingIntent = PendingIntent.getService(
+                applicationContext,
+                101,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            alarmManager?.set(
+                android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + 1000,
+                restartPendingIntent
+            )
+            GatewayLogger.log(applicationContext, "App closed from Recents: Background Service kept active", "INFO", "SYSTEM")
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {

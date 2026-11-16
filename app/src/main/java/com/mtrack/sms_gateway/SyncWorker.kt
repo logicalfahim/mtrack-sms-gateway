@@ -97,7 +97,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 } else if (action == "test_ping") {
                     GatewayLogger.log(applicationContext, "Test ping verified (HTTP $code)", "SUCCESS", "SYSTEM")
                 } else {
-                    GatewayLogger.log(applicationContext, "Synced: $platform ৳$amount [Trx: $trxId]", "SUCCESS", platform)
+                    GatewayLogger.log(applicationContext, "Synced: $platform Tk $amount [Trx: $trxId]", "SUCCESS", platform)
                     if (trxId.isNotEmpty()) {
                         StatementManager.recordStatement(
                             context = applicationContext,
