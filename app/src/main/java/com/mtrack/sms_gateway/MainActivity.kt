@@ -93,6 +93,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNavStatements: Button
     private lateinit var btnTestPingHome: Button
 
+    // Permissions Health Card Views
+    private lateinit var cardPermissionAlert: View
+    private lateinit var tvPermissionCardIcon: TextView
+    private lateinit var tvPermissionCardTitle: TextView
+    private lateinit var tvPermissionSummaryBadge: TextView
+
+    private lateinit var rowPermSms: View
+    private lateinit var iconPermSms: TextView
+    private lateinit var statusPermSms: TextView
+
+    private lateinit var rowPermBattery: View
+    private lateinit var iconPermBattery: TextView
+    private lateinit var statusPermBattery: TextView
+
+    private lateinit var rowPermNotification: View
+    private lateinit var iconPermNotification: TextView
+    private lateinit var statusPermNotification: TextView
+
+    private lateinit var rowPermPhoneState: View
+    private lateinit var iconPermPhoneState: TextView
+    private lateinit var statusPermPhoneState: TextView
+
+    private lateinit var btnFixAllPermissions: Button
+
     // Statements Page Views
     private lateinit var tvStatementCount: TextView
     private lateinit var btnClearStatements: TextView
@@ -165,7 +189,6 @@ class MainActivity : AppCompatActivity() {
         setupAboutPage()
 
         requestSystemPermissions()
-        checkBatteryOptimizations()
         loadConfig()
         updateDeviceTelemetry()
 
@@ -178,6 +201,7 @@ class MainActivity : AppCompatActivity() {
         renderMetrics()
         renderStatements()
         renderLogs()
+        checkAndRenderPermissions()
     }
 
     override fun onResume() {
@@ -195,6 +219,7 @@ class MainActivity : AppCompatActivity() {
         renderMetrics()
         renderStatements()
         renderLogs()
+        checkAndRenderPermissions()
     }
 
     override fun onPause() {
@@ -244,6 +269,36 @@ class MainActivity : AppCompatActivity() {
         btnSyncNow = findViewById(R.id.btnSyncNow)
         btnNavStatements = findViewById(R.id.btnNavStatements)
         btnTestPingHome = findViewById(R.id.btnTestPingHome)
+
+        // Permissions Health Card Views
+        cardPermissionAlert = findViewById(R.id.cardPermissionAlert)
+        tvPermissionCardIcon = findViewById(R.id.tvPermissionCardIcon)
+        tvPermissionCardTitle = findViewById(R.id.tvPermissionCardTitle)
+        tvPermissionSummaryBadge = findViewById(R.id.tvPermissionSummaryBadge)
+
+        rowPermSms = findViewById(R.id.rowPermSms)
+        iconPermSms = findViewById(R.id.iconPermSms)
+        statusPermSms = findViewById(R.id.statusPermSms)
+
+        rowPermBattery = findViewById(R.id.rowPermBattery)
+        iconPermBattery = findViewById(R.id.iconPermBattery)
+        statusPermBattery = findViewById(R.id.statusPermBattery)
+
+        rowPermNotification = findViewById(R.id.rowPermNotification)
+        iconPermNotification = findViewById(R.id.iconPermNotification)
+        statusPermNotification = findViewById(R.id.statusPermNotification)
+
+        rowPermPhoneState = findViewById(R.id.rowPermPhoneState)
+        iconPermPhoneState = findViewById(R.id.iconPermPhoneState)
+        statusPermPhoneState = findViewById(R.id.statusPermPhoneState)
+
+        btnFixAllPermissions = findViewById(R.id.btnFixAllPermissions)
+
+        rowPermSms.setOnClickListener { requestSmsPermission() }
+        rowPermBattery.setOnClickListener { requestBatteryPermission() }
+        rowPermNotification.setOnClickListener { requestNotificationPermission() }
+        rowPermPhoneState.setOnClickListener { requestPhoneStatePermission() }
+        btnFixAllPermissions.setOnClickListener { fixMissingPermissions() }
 
         // Statements Views
         tvStatementCount = findViewById(R.id.tvStatementCount)
@@ -592,22 +647,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Statements refreshed! ($newCount verified)", Toast.LENGTH_SHORT).show()
             }
         }.start()
-    }
-
-    private fun checkBatteryOptimizations() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    // Ignored
-                }
-            }
-        }
     }
 
     private fun setupAboutPage() {
@@ -1151,27 +1190,285 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestSystemPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.INTERNET,
-            Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.READ_PHONE_STATE
-        )
+        fixMissingPermissions()
+    }
+
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+            Toast.makeText(this, "Enable SMS & Permissions in App Settings", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Please open device Settings -> Apps -> M Track Gateway", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestSmsPermission() {
+        val hasReceive = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        val hasRead = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+        if (!hasReceive || !hasRead) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECEIVE_SMS) ||
+                ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_SMS)) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS),
+                    REQ_CODE_SMS
+                )
+            } else {
+                openAppSettings()
+            }
+        } else {
+            Toast.makeText(this, "SMS Permission is already active ✓", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestBatteryPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager?.isIgnoringBatteryOptimizations(packageName) != true) {
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    try {
+                        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        startActivity(intent)
+                    } catch (e2: Exception) {
+                        openAppSettings()
+                    }
+                }
+            } else {
+                Toast.makeText(this, "Battery is already Unrestricted ✓", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasNotif = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            if (!hasNotif) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        REQ_CODE_NOTIF
+                    )
+                } else {
+                    try {
+                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                        }
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        openAppSettings()
+                    }
+                }
+            } else {
+                Toast.makeText(this, "Notification permission is already active ✓", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "Notification permission is active ✓", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestPhoneStatePermission() {
+        val hasPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+        if (!hasPhone) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_PHONE_STATE)) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.READ_PHONE_STATE),
+                    REQ_CODE_PHONE
+                )
+            } else {
+                openAppSettings()
+            }
+        } else {
+            Toast.makeText(this, "Phone State Permission is already active ✓", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun fixMissingPermissions() {
+        val hasReceive = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        val hasRead = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+        val hasPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+        val missing = mutableListOf<String>()
+        if (!hasReceive) missing.add(Manifest.permission.RECEIVE_SMS)
+        if (!hasRead) missing.add(Manifest.permission.READ_SMS)
+        if (!hasPhone) missing.add(Manifest.permission.READ_PHONE_STATE)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val listNeeded = ArrayList<String>()
-        for (p in permissions) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                listNeeded.add(p)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
-        if (listNeeded.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, listNeeded.toTypedArray(), 101)
+        if (missing.isNotEmpty()) {
+            val needSettings = missing.any { !ActivityCompat.shouldShowRequestPermissionRationale(this, it) &&
+                getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE).getBoolean("perm_asked_once", false) }
+            if (needSettings) {
+                openAppSettings()
+            } else {
+                getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE).edit().putBoolean("perm_asked_once", true).apply()
+                ActivityCompat.requestPermissions(this, missing.toTypedArray(), 101)
+            }
+        } else {
+            requestBatteryPermission()
         }
+    }
+
+    private fun checkAndRenderPermissions() {
+        val hasSmsReceive = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        val hasSmsRead = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+        val hasSms = hasSmsReceive && hasSmsRead
+
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val hasBattery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager?.isIgnoringBatteryOptimizations(packageName) ?: false
+        } else true
+
+        val hasNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else true
+
+        val hasPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+        var missingCount = 0
+
+        // 1. SMS
+        if (hasSms) {
+            iconPermSms.text = "✓"
+            iconPermSms.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            statusPermSms.text = "✓ Active & Granted"
+            statusPermSms.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        } else {
+            missingCount++
+            iconPermSms.text = "❌"
+            iconPermSms.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            statusPermSms.text = "❌ Pending / Denied • Tap to configure"
+            statusPermSms.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+        }
+
+        // 2. Battery
+        if (hasBattery) {
+            iconPermBattery.text = "✓"
+            iconPermBattery.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            statusPermBattery.text = "✓ Unrestricted (24/7 background keep-alive active)"
+            statusPermBattery.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        } else {
+            missingCount++
+            iconPermBattery.text = "❌"
+            iconPermBattery.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            statusPermBattery.text = "❌ Pending / Restricted • Tap to disable optimization"
+            statusPermBattery.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+        }
+
+        // 3. Notification
+        if (hasNotif) {
+            iconPermNotification.text = "✓"
+            iconPermNotification.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            statusPermNotification.text = "✓ Active & Granted"
+            statusPermNotification.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        } else {
+            missingCount++
+            iconPermNotification.text = "❌"
+            iconPermNotification.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            statusPermNotification.text = "❌ Pending / Denied • Tap to configure"
+            statusPermNotification.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+        }
+
+        // 4. Phone State
+        if (hasPhoneState) {
+            iconPermPhoneState.text = "✓"
+            iconPermPhoneState.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            statusPermPhoneState.text = "✓ Active & Granted"
+            statusPermPhoneState.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        } else {
+            missingCount++
+            iconPermPhoneState.text = "❌"
+            iconPermPhoneState.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            statusPermPhoneState.text = "❌ Pending / Denied • Tap to configure"
+            statusPermPhoneState.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+        }
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+
+        if (missingCount == 0) {
+            tvPermissionCardIcon.text = "🛡️"
+            tvPermissionCardTitle.text = "All System Permissions Active"
+            tvPermissionCardTitle.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            tvPermissionSummaryBadge.text = "✓ HEALTHY"
+            tvPermissionSummaryBadge.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+            btnFixAllPermissions.visibility = View.GONE
+            nm?.cancel(NOTIFICATION_PERM_ALERT_ID)
+        } else {
+            tvPermissionCardIcon.text = "⚠️"
+            tvPermissionCardTitle.text = "Permissions Required ($missingCount Pending)"
+            tvPermissionCardTitle.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            tvPermissionSummaryBadge.text = "❌ $missingCount PENDING"
+            tvPermissionSummaryBadge.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            btnFixAllPermissions.visibility = View.VISIBLE
+            btnFixAllPermissions.text = "🛡️ Grant $missingCount Missing Permission${if (missingCount > 1) "s" else ""}"
+            showPersistentPermissionNotification(missingCount)
+        }
+    }
+
+    private fun showPersistentPermissionNotification(missingCount: Int) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                CHANNEL_PERM_ALERT,
+                "Permission Warnings",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifies when required SMS gateway permissions are missing"
+                setShowBadge(true)
+            }
+            nm.createNotificationChannel(channel)
+        }
+
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_PERM_ALERT)
+            .setContentTitle("⚠️ Action Required: $missingCount Permissions Missing")
+            .setContentText("Tap to grant SMS & background permissions to keep gateway running.")
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        nm.notify(NOTIFICATION_PERM_ALERT_ID, notification)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        checkAndRenderPermissions()
+    }
+
+    companion object {
+        private const val CHANNEL_PERM_ALERT = "mtrack_permission_alert_channel"
+        private const val NOTIFICATION_PERM_ALERT_ID = 3001
+        private const val REQ_CODE_SMS = 201
+        private const val REQ_CODE_NOTIF = 202
+        private const val REQ_CODE_PHONE = 203
     }
 }

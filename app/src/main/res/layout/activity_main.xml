@@ -215,6 +215,284 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- PERMISSIONS HEALTH & DIAGNOSTIC CARD -->
+                    <LinearLayout
+                        android:id="@+id/cardPermissionAlert"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="14dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/tvPermissionCardIcon"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="⚠️"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/tvPermissionCardTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="System Permissions Health"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvPermissionSummaryBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_chip_flat"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="3dp"
+                                android:text="Checking..."
+                                android:textColor="@color/status_warning"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="10dp"
+                            android:background="@color/bg_card_border" />
+
+                        <!-- Permission Item 1: SMS Access -->
+                        <LinearLayout
+                            android:id="@+id/rowPermSms"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <TextView
+                                android:id="@+id/iconPermSms"
+                                android:layout_width="24dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:text="❌"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:text="SMS Inbox &amp; Receive (bKash, Nagad, Rocket)"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/statusPermSms"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Pending / Denied • Tap to grant"
+                                    android:textColor="@color/status_danger"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="⚙️ Fix"
+                                android:textColor="@color/brand_primary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Permission Item 2: Battery Optimization -->
+                        <LinearLayout
+                            android:id="@+id/rowPermBattery"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <TextView
+                                android:id="@+id/iconPermBattery"
+                                android:layout_width="24dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:text="❌"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:text="Unrestricted Battery (24/7 Keep-Alive)"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/statusPermBattery"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Restricted • OS may kill background sync"
+                                    android:textColor="@color/status_danger"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="⚙️ Fix"
+                                android:textColor="@color/brand_primary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Permission Item 3: Post Notifications -->
+                        <LinearLayout
+                            android:id="@+id/rowPermNotification"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <TextView
+                                android:id="@+id/iconPermNotification"
+                                android:layout_width="24dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:text="❌"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:text="Foreground Notification Service"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/statusPermNotification"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Pending / Denied • Tap to grant"
+                                    android:textColor="@color/status_danger"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="⚙️ Fix"
+                                android:textColor="@color/brand_primary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Permission Item 4: Phone State -->
+                        <LinearLayout
+                            android:id="@+id/rowPermPhoneState"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <TextView
+                                android:id="@+id/iconPermPhoneState"
+                                android:layout_width="24dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:text="❌"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:text="SIM Slot &amp; Device Identity"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/statusPermPhoneState"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Pending / Denied • Tap to grant"
+                                    android:textColor="@color/status_danger"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="⚙️ Fix"
+                                android:textColor="@color/brand_primary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Fix All Action Button -->
+                        <Button
+                            android:id="@+id/btnFixAllPermissions"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:backgroundTint="@color/brand_primary"
+                            android:text="🛡️ Grant Missing Permissions"
+                            android:textColor="@color/white"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+
                     <!-- 4 FLAT KPI METRIC CARDS -->
                     <LinearLayout
                         android:layout_width="match_parent"
