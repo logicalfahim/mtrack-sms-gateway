@@ -66,12 +66,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewStatements: View
     private lateinit var viewActivities: View
     private lateinit var viewSettings: View
+    private lateinit var viewAbout: View
 
     // Sidebar Menu Items
     private lateinit var menuNavDashboard: View
     private lateinit var menuNavStatements: View
     private lateinit var menuNavActivities: View
     private lateinit var menuNavSettings: View
+    private lateinit var menuNavAbout: View
 
     // Dashboard Views
     private lateinit var swServiceToggle: SwitchMaterial
@@ -97,7 +99,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var llStatementsContainer: LinearLayout
     private lateinit var tvNoStatements: TextView
 
-    // Filter Chips
+    // Date & Operator Filter Chips
+    private lateinit var chipDateToday: TextView
+    private lateinit var chipDateMonth: TextView
+    private lateinit var chipDateAll: TextView
+    private var activeDateFilter = "TODAY" // Default: TODAY
+
     private lateinit var chipFilterAll: TextView
     private lateinit var chipFilterBkash: TextView
     private lateinit var chipFilterNagad: TextView
@@ -151,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         setupStatementsPage()
         setupActivitiesPage()
         setupSettingsPage()
+        setupAboutPage()
 
         requestSystemPermissions()
         loadConfig()
@@ -205,12 +213,14 @@ class MainActivity : AppCompatActivity() {
         viewStatements = findViewById(R.id.viewStatements)
         viewActivities = findViewById(R.id.viewActivities)
         viewSettings = findViewById(R.id.viewSettings)
+        viewAbout = findViewById(R.id.viewAbout)
 
         // Sidebar Menu Items
         menuNavDashboard = findViewById(R.id.menuNavDashboard)
         menuNavStatements = findViewById(R.id.menuNavStatements)
         menuNavActivities = findViewById(R.id.menuNavActivities)
         menuNavSettings = findViewById(R.id.menuNavSettings)
+        menuNavAbout = findViewById(R.id.menuNavAbout)
 
         // Dashboard Views
         swServiceToggle = findViewById(R.id.swServiceToggle)
@@ -235,6 +245,10 @@ class MainActivity : AppCompatActivity() {
         etSearchStatement = findViewById(R.id.etSearchStatement)
         llStatementsContainer = findViewById(R.id.llStatementsContainer)
         tvNoStatements = findViewById(R.id.tvNoStatements)
+
+        chipDateToday = findViewById(R.id.chipDateToday)
+        chipDateMonth = findViewById(R.id.chipDateMonth)
+        chipDateAll = findViewById(R.id.chipDateAll)
 
         chipFilterAll = findViewById(R.id.chipFilterAll)
         chipFilterBkash = findViewById(R.id.chipFilterBkash)
@@ -287,6 +301,11 @@ class MainActivity : AppCompatActivity() {
             switchPage("Settings")
             drawerLayout.closeDrawer(GravityCompat.START)
         }
+
+        menuNavAbout.setOnClickListener {
+            switchPage("About")
+            drawerLayout.closeDrawer(GravityCompat.START)
+        }
     }
 
     private fun switchPage(pageName: String) {
@@ -294,11 +313,13 @@ class MainActivity : AppCompatActivity() {
         viewStatements.visibility = if (pageName == "Statements") View.VISIBLE else View.GONE
         viewActivities.visibility = if (pageName == "Activities") View.VISIBLE else View.GONE
         viewSettings.visibility = if (pageName == "Settings") View.VISIBLE else View.GONE
+        viewAbout.visibility = if (pageName == "About") View.VISIBLE else View.GONE
 
         tvHeaderTitle.text = when (pageName) {
             "Statements" -> "Statements Ledger"
             "Activities" -> "Live Activities"
             "Settings" -> "API Settings"
+            "About" -> "About Gateway"
             else -> "M Track"
         }
 
@@ -346,54 +367,143 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Filter Chips Click Listeners
-        val chips = listOf(chipFilterAll, chipFilterBkash, chipFilterNagad, chipFilterRocket, chipFilterCashIn, chipFilterFailed)
-        fun resetChipStyles() {
-            chips.forEach { chip ->
+        // Date Filter Chips (Default: Today)
+        val dateChips = listOf(chipDateToday, chipDateMonth, chipDateAll)
+        fun resetDateChipStyles() {
+            dateChips.forEach { chip ->
+                chip.setBackgroundResource(R.drawable.bg_chip_flat)
+                chip.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            }
+        }
+
+        // Set initial Today selection style
+        resetDateChipStyles()
+        chipDateToday.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+        chipDateToday.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+
+        chipDateToday.setOnClickListener {
+            activeDateFilter = "TODAY"
+            resetDateChipStyles()
+            chipDateToday.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            chipDateToday.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+            renderStatements()
+        }
+
+        chipDateMonth.setOnClickListener {
+            activeDateFilter = "THIS_MONTH"
+            resetDateChipStyles()
+            chipDateMonth.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            chipDateMonth.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+            renderStatements()
+        }
+
+        chipDateAll.setOnClickListener {
+            activeDateFilter = "ALL"
+            resetDateChipStyles()
+            chipDateAll.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            chipDateAll.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+            renderStatements()
+        }
+
+        // Operator Filter Chips Click Listeners
+        val operatorChips = listOf(chipFilterAll, chipFilterBkash, chipFilterNagad, chipFilterRocket, chipFilterCashIn, chipFilterFailed)
+        fun resetOperatorChipStyles() {
+            operatorChips.forEach { chip ->
                 chip.setBackgroundResource(R.drawable.bg_chip_flat)
             }
         }
 
         chipFilterAll.setOnClickListener {
             activeFilter = "ALL"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterAll.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
 
         chipFilterBkash.setOnClickListener {
             activeFilter = "bKash"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterBkash.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
 
         chipFilterNagad.setOnClickListener {
             activeFilter = "Nagad"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterNagad.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
 
         chipFilterRocket.setOnClickListener {
             activeFilter = "Rocket"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterRocket.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
 
         chipFilterCashIn.setOnClickListener {
             activeFilter = "CashIn"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterCashIn.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
         }
 
         chipFilterFailed.setOnClickListener {
             activeFilter = "Failed"
-            resetChipStyles()
+            resetOperatorChipStyles()
             chipFilterFailed.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
             renderStatements()
+        }
+    }
+
+    private fun setupAboutPage() {
+        val rowDevPhone = findViewById<View>(R.id.rowDevPhone)
+        val rowDevEmail = findViewById<View>(R.id.rowDevEmail)
+        val rowCompanyPhone = findViewById<View>(R.id.rowCompanyPhone)
+        val rowCompanyEmail = findViewById<View>(R.id.rowCompanyEmail)
+
+        rowDevPhone?.setOnClickListener {
+            val phone = "+8801321119887"
+            try {
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                startActivity(intent)
+            } catch (e: Exception) {
+                copyTextToClipboard(phone, "Developer Phone Copied: $phone")
+            }
+        }
+
+        rowDevEmail?.setOnClickListener {
+            val email = "mtrackspprt@gmail.com"
+            try {
+                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")).apply {
+                    putExtra(Intent.EXTRA_SUBJECT, "M Track Payment Gateway Support")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                copyTextToClipboard(email, "Developer Email Copied: $email")
+            }
+        }
+
+        rowCompanyPhone?.setOnClickListener {
+            val phone = "+8801321119888"
+            try {
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                startActivity(intent)
+            } catch (e: Exception) {
+                copyTextToClipboard(phone, "Company Hotline Copied: $phone")
+            }
+        }
+
+        rowCompanyEmail?.setOnClickListener {
+            val email = "mtrackbd@gmail.com"
+            try {
+                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")).apply {
+                    putExtra(Intent.EXTRA_SUBJECT, "M Track Corporate Inquiry")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                copyTextToClipboard(email, "Company Email Copied: $email")
+            }
         }
     }
 
@@ -521,13 +631,24 @@ class MainActivity : AppCompatActivity() {
         val all = StatementManager.getStatements(this)
         val query = etSearchStatement.text.toString().trim().lowercase()
 
-        // Filter based on active chip & search text
+        val todayPrefix = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val thisMonthPrefix = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+
+        // Filter based on active date chip, operator chip & search text
         val filtered = all.filter { st ->
+            // Date Filter: Defaults to TODAY!
+            val matchDate = when (activeDateFilter) {
+                "TODAY" -> st.date.startsWith(todayPrefix)
+                "THIS_MONTH" -> st.date.startsWith(thisMonthPrefix)
+                else -> true // "ALL"
+            }
+
+            // Operator / Status Filter: bKash, Nagad, Rocket, CashIn show only SYNCED records
             val matchChip = when (activeFilter) {
-                "bKash" -> st.platform.equals("bKash", ignoreCase = true)
-                "Nagad" -> st.platform.equals("Nagad", ignoreCase = true)
-                "Rocket" -> st.platform.equals("Rocket", ignoreCase = true)
-                "CashIn" -> st.type.contains("Cash In", ignoreCase = true)
+                "bKash" -> st.platform.equals("bKash", ignoreCase = true) && st.status == "SYNCED"
+                "Nagad" -> st.platform.equals("Nagad", ignoreCase = true) && st.status == "SYNCED"
+                "Rocket" -> st.platform.equals("Rocket", ignoreCase = true) && st.status == "SYNCED"
+                "CashIn" -> st.type.contains("Cash In", ignoreCase = true) && st.status == "SYNCED"
                 "Failed" -> st.status == "FAILED" || st.status == "PENDING"
                 else -> true
             }
@@ -539,7 +660,7 @@ class MainActivity : AppCompatActivity() {
                 st.platform.lowercase().contains(query)
             }
 
-            matchChip && matchQuery
+            matchDate && matchChip && matchQuery
         }
 
         tvStatementCount.text = "${filtered.size} records"
