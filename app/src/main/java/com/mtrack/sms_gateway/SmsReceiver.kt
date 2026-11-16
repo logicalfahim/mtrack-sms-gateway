@@ -64,6 +64,7 @@ class SmsReceiver : BroadcastReceiver() {
                 // Enqueue background sync worker
                 val inputData = Data.Builder()
                     .putString("sender", sender)
+                    .putString("sender_number", parsed.senderNumber)
                     .putString("message", messageBody)
                     .putString("platform", parsed.platform)
                     .putString("type", parsed.type)

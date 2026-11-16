@@ -612,6 +612,7 @@ class MainActivity : AppCompatActivity() {
 
                         val inputData = Data.Builder()
                             .putString("sender", sender)
+                            .putString("sender_number", parsed.senderNumber)
                             .putString("message", body)
                             .putString("platform", parsed.platform)
                             .putString("type", parsed.type)
@@ -1126,6 +1127,7 @@ class MainActivity : AppCompatActivity() {
                 // Enqueue work
                 val inputData = Data.Builder()
                     .putString("sender", item.sender)
+                    .putString("sender_number", item.parsed.senderNumber)
                     .putString("message", item.body)
                     .putString("platform", item.parsed.platform)
                     .putString("type", item.parsed.type)

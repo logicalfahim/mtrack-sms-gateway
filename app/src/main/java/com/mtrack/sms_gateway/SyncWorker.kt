@@ -25,6 +25,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
 
         val action = inputData.getString("action") ?: "sync"
         val sender = inputData.getString("sender") ?: ""
+        val senderNumber = inputData.getString("sender_number") ?: ""
         val message = inputData.getString("message") ?: ""
         val platform = inputData.getString("platform") ?: "bKash"
         val type = inputData.getString("type") ?: "Receive Money"
@@ -63,6 +64,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .add("api_key", apiKey)
                 .add("action", action)
                 .add("sender", sender)
+                .add("sender_number", senderNumber)
                 .add("message", message)
                 .add("platform", platform)
                 .add("type", type)

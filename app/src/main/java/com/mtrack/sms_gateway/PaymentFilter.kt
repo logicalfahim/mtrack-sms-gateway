@@ -19,7 +19,14 @@ object PaymentFilter {
         "transfer to", "fee charged", "payment of tk"
     )
 
-    private val SENDER_REGEX = Pattern.compile("(?:from|customer:\\s*|sender:\\s*|by)\\s*(01[3-9]\\d{8})", Pattern.CASE_INSENSITIVE)
+    private val SENDER_REGEX = Pattern.compile(
+        "(?:from|customer[\\s:]*|sender[\\s:]*|payer[\\s:]*|a\\/c[\\s:]*|account[\\s:]*|by)[\\s:]*(\\+?(?:88)?01[3-9][0-9*xX\\-]{5,12})",
+        Pattern.CASE_INSENSITIVE
+    )
+    private val SENDER_FALLBACK_REGEX = Pattern.compile(
+        "(\\+?(?:88)?01[3-9][0-9*xX\\-]{5,12})",
+        Pattern.CASE_INSENSITIVE
+    )
     private val TRX_REGEX = Pattern.compile("(?:TrxID|TxnID|Txn\\s*Id|Trx\\s*Id)[\\s:]*([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
     private val AMOUNT_REGEX = Pattern.compile("(?:Tk|BDT)\\.?\\s*([\\d,]+\\.?\\d*)", Pattern.CASE_INSENSITIVE)
 
@@ -54,6 +61,10 @@ object PaymentFilter {
         // 2. Blacklist: Any Outgoing / Debit / Expense keyword instantly drops the message
         for (kw in OUTGOING_KEYWORDS) {
             if (bLower.contains(kw)) {
+                // Safeguard: "payment of tk" can appear in incoming merchant notices: "received payment of Tk ... from ..."
+                if (kw == "payment of tk" && (bLower.contains("received") || bLower.contains("from"))) {
+                    continue
+                }
                 return ParsedPayment(false, platform, "Debit/Outgoing", "", "", "")
             }
         }
@@ -85,12 +96,21 @@ object PaymentFilter {
             "0.00"
         }
 
-        // 6. Extract Sender Mobile Number
+        // 6. Extract Sender Mobile Number (As-Is: Full, Masked 0171***789, +88, Rocket 12-digit)
+        var customerPhone = ""
         val senderMatcher = SENDER_REGEX.matcher(b)
-        val customerPhone = if (senderMatcher.find()) {
-            senderMatcher.group(1)?.trim() ?: ""
+        if (senderMatcher.find()) {
+            customerPhone = senderMatcher.group(1)?.trim() ?: ""
         } else {
-            ""
+            // Fallback: search for any phone pattern in message that is not TrxID
+            val fallbackMatcher = SENDER_FALLBACK_REGEX.matcher(b)
+            while (fallbackMatcher.find()) {
+                val cand = fallbackMatcher.group(1)?.trim() ?: ""
+                if (cand.isNotEmpty() && !cand.equals(trxId, ignoreCase = true)) {
+                    customerPhone = cand
+                    break
+                }
+            }
         }
 
         // 7. Determine Category
