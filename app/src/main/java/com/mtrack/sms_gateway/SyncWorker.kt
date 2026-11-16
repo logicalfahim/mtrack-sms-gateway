@@ -26,8 +26,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         val action = inputData.getString("action") ?: "sync"
         val sender = inputData.getString("sender") ?: ""
         val message = inputData.getString("message") ?: ""
-        val platform = inputData.getString("platform") ?: "SMS"
+        val platform = inputData.getString("platform") ?: "bKash"
         val type = inputData.getString("type") ?: "Receive Money"
+        val trxId = inputData.getString("trx_id") ?: ""
+        val amount = inputData.getString("amount") ?: ""
         val smsDate = inputData.getString("sms_date") ?: ""
         val smsTimestamp = inputData.getString("sms_timestamp") ?: ""
         val simSlot = inputData.getInt("sim_slot", 1)
@@ -51,8 +53,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
 
         try {
             val client = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
                 .build()
 
             val formBody = FormBody.Builder()
@@ -62,6 +66,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 .add("message", message)
                 .add("platform", platform)
                 .add("type", type)
+                .add("trx_id", trxId)
+                .add("amount", amount)
                 .add("sms_date", smsDate)
                 .add("sms_timestamp", smsTimestamp)
                 .add("sim_slot", simSlot.toString())
@@ -75,7 +81,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
             val request = Request.Builder()
                 .url(webhookUrl)
                 .addHeader("X-API-KEY", apiKey)
-                .addHeader("User-Agent", "MTrack-SMS-Gateway/2.0 (Android)")
+                .addHeader("User-Agent", "MTrack-Payment-Gateway/2.0 (Android)")
                 .post(formBody)
                 .build()
 
@@ -91,16 +97,56 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 } else if (action == "test_ping") {
                     GatewayLogger.log(applicationContext, "Test ping verified (HTTP $code)", "SUCCESS", "SYSTEM")
                 } else {
-                    GatewayLogger.log(applicationContext, "Synced: $sender (HTTP $code)", "SUCCESS", platform)
+                    GatewayLogger.log(applicationContext, "Synced: $platform ৳$amount [Trx: $trxId]", "SUCCESS", platform)
+                    if (trxId.isNotEmpty()) {
+                        StatementManager.recordStatement(
+                            context = applicationContext,
+                            trxId = trxId,
+                            platform = platform,
+                            type = type,
+                            sender = sender,
+                            amount = amount,
+                            date = smsDate,
+                            status = "SYNCED",
+                            rawMessage = message
+                        )
+                    }
                 }
                 Result.success()
             } else {
-                GatewayLogger.log(applicationContext, "Server error: HTTP $code ($sender)", "FAILED", platform)
+                GatewayLogger.log(applicationContext, "Server error HTTP $code: $platform (Trx: $trxId)", "FAILED", platform)
+                if (trxId.isNotEmpty()) {
+                    StatementManager.recordStatement(
+                        context = applicationContext,
+                        trxId = trxId,
+                        platform = platform,
+                        type = type,
+                        sender = sender,
+                        amount = amount,
+                        date = smsDate,
+                        status = "FAILED",
+                        rawMessage = message
+                    )
+                }
                 Result.retry()
             }
         } catch (e: Exception) {
             Log.e("SyncWorker", "Network Error: ${e.message}", e)
-            GatewayLogger.log(applicationContext, "Network Failed: ${e.localizedMessage ?: "Timeout"}", "FAILED", platform)
+            val errText = e.localizedMessage ?: "Connection error"
+            GatewayLogger.log(applicationContext, "Network Failed: $errText", "FAILED", platform)
+            if (trxId.isNotEmpty()) {
+                StatementManager.recordStatement(
+                    context = applicationContext,
+                    trxId = trxId,
+                    platform = platform,
+                    type = type,
+                    sender = sender,
+                    amount = amount,
+                    date = smsDate,
+                    status = "FAILED",
+                    rawMessage = message
+                )
+            }
             return Result.retry()
         }
     }

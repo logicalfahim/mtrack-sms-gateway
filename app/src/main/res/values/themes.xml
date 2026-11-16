@@ -1,24 +1,27 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme -->
-    <style name="Theme.MTrackGateway" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Primary brand color. -->
+    <!-- Clean, Flat, Professional Enterprise Light Theme -->
+    <style name="Theme.MTrackGateway" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <!-- Primary Brand -->
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorPrimaryVariant">@color/brand_primary_dark</item>
         <item name="colorOnPrimary">@color/white</item>
-        <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/brand_accent</item>
-        <item name="colorSecondaryVariant">@color/brand_accent</item>
+        <!-- Secondary / Accent -->
+        <item name="colorSecondary">@color/brand_primary</item>
+        <item name="colorSecondaryVariant">@color/brand_primary_dark</item>
         <item name="colorOnSecondary">@color/white</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">@color/bg_dark</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">@color/bg_dark</item>
+        <!-- Backgrounds & Windows -->
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:statusBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
     </style>
 
     <!-- Splash Screen Theme -->
-    <style name="Theme.MTrackGateway.Splash" parent="Theme.MTrackGateway">
-        <item name="android:windowBackground">@color/bg_dark</item>
-        <item name="android:statusBarColor">@color/bg_dark</item>
-        <item name="android:navigationBarColor">@color/bg_dark</item>
+    <style name="Theme.MTrackGateway.Splash" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:statusBarColor">@color/bg_app</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/bg_app</item>
     </style>
 </resources>

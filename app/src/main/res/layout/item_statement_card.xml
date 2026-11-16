@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/bg_card_flat"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Top Badge Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Platform Badge -->
+        <TextView
+            android:id="@+id/tvCardPlatform"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_flat"
+            android:paddingHorizontal="7dp"
+            android:paddingVertical="2dp"
+            android:text="bKash"
+            android:textColor="@color/operator_bkash"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <!-- Type Badge -->
+        <TextView
+            android:id="@+id/tvCardType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_chip_flat"
+            android:paddingHorizontal="7dp"
+            android:paddingVertical="2dp"
+            android:text="Agent Cash In"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Status Pill -->
+        <TextView
+            android:id="@+id/tvCardStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_flat"
+            android:paddingHorizontal="7dp"
+            android:paddingVertical="2dp"
+            android:text="✓ Synced"
+            android:textColor="@color/status_online"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Middle Amount & TrxID Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvCardAmount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-black"
+            android:text="৳ 400.00"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp" />
+
+        <!-- TrxID with copy icon -->
+        <LinearLayout
+            android:id="@+id/btnCopyTrx"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_flat"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/tvCardTrxId"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="DKG9JIADWP"
+                android:textColor="@color/brand_primary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="📋"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Bottom Customer & Date Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvCardSender"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:text="01927574767"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="6dp"
+            android:text="•"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvCardDate"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="16 Nov 2026, 11:47 AM"
+            android:textColor="@color/text_muted"
+            android:textSize="10sp" />
+
+        <!-- Retry Button (Visible only on FAILED) -->
+        <TextView
+            android:id="@+id/btnCardRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_flat"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="Retry Sync"
+            android:textColor="@color/brand_primary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

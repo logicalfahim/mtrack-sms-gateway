@@ -17,8 +17,6 @@ class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            
-            // Detect SIM Slot / Subscription ID from extras
             val simSlot = detectSimSlot(intent)
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
@@ -28,25 +26,49 @@ class SmsReceiver : BroadcastReceiver() {
 
                 if (sender.isEmpty() || messageBody.isEmpty()) continue
 
+                // 1. Strict Incoming Payment Filter
+                // Drops any outgoing SMS (e.g. bKash to Bank, Cash Out) and non-bKash/Nagad/Rocket SMS
+                // Rocket is strictly sender 16216
+                val parsed = PaymentFilter.parse(sender, messageBody)
+                if (!parsed.isValid) {
+                    Log.d("SmsReceiver", "Ignored non-incoming/non-payment SMS from: $sender")
+                    continue
+                }
+
                 val timestamp = if (sms.timestampMillis > 0) sms.timestampMillis else System.currentTimeMillis()
                 val formattedDate = dateFormat.format(Date(timestamp))
 
-                val platform = detectPlatform(sender, messageBody)
-                val type = detectType(messageBody)
+                Log.d("SmsReceiver", "Incoming Payment: ${parsed.platform} [${parsed.type}, Trx: ${parsed.trxId}, Tk ${parsed.amount}]")
 
-                Log.d("SmsReceiver", "SMS Received: $sender [$platform, Type: $type, Date: $formattedDate, SIM: $simSlot]")
+                // Immediately log in Live Terminal
                 GatewayLogger.log(
                     context,
-                    "SMS ($platform • $type): $sender",
+                    "${parsed.platform} (${parsed.type}): ৳${parsed.amount} [Trx: ${parsed.trxId}]",
                     "INFO",
-                    platform
+                    parsed.platform
                 )
 
+                // Record in Statements Ledger as PENDING
+                StatementManager.recordStatement(
+                    context = context,
+                    trxId = parsed.trxId,
+                    platform = parsed.platform,
+                    type = parsed.type,
+                    sender = parsed.senderNumber,
+                    amount = parsed.amount,
+                    date = formattedDate,
+                    status = "PENDING",
+                    rawMessage = messageBody
+                )
+
+                // Enqueue background sync worker
                 val inputData = Data.Builder()
                     .putString("sender", sender)
                     .putString("message", messageBody)
-                    .putString("platform", platform)
-                    .putString("type", type)
+                    .putString("platform", parsed.platform)
+                    .putString("type", parsed.type)
+                    .putString("trx_id", parsed.trxId)
+                    .putString("amount", parsed.amount)
                     .putString("sms_date", formattedDate)
                     .putString("sms_timestamp", timestamp.toString())
                     .putInt("sim_slot", simSlot)
@@ -75,29 +97,6 @@ class SmsReceiver : BroadcastReceiver() {
         val subscription = intent.getIntExtra("subscription", -1)
         if (subscription != -1) return subscription
 
-        return 1 // Default to SIM 1
-    }
-
-    private fun detectPlatform(sender: String, body: String): String {
-        val s = sender.lowercase()
-        val b = body.lowercase()
-
-        return when {
-            s.contains("bkash") || s == "16247" || b.contains("bkash") -> "bKash"
-            s.contains("nagad") || s == "16167" || b.contains("nagad") -> "Nagad"
-            s.contains("rocket") || s == "16216" || b.contains("rocket") || s.contains("dbbl") -> "Rocket"
-            s.contains("upay") || b.contains("upay") -> "Upay"
-            b.contains("trxid") || b.contains("txnid") -> "Payment"
-            else -> "SMS"
-        }
-    }
-
-    private fun detectType(body: String): String {
-        val b = body.lowercase()
-        return when {
-            b.contains("cash in") || b.contains("cash-in") -> "Cash In"
-            b.contains("merchant") || b.contains("payment to") || b.contains("payment tk") -> "Merchant"
-            else -> "Receive Money"
-        }
+        return 1
     }
 }

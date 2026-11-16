@@ -3,6 +3,8 @@ package com.mtrack.sms_gateway
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -14,12 +16,17 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.provider.Telephony
+import android.text.Editable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -30,9 +37,12 @@ import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -44,35 +54,70 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    // Views
+    // Drawer & Navigation
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var btnMenuToggle: ImageView
+    private lateinit var tvHeaderTitle: TextView
+    private lateinit var ivHeaderStatusDot: ImageView
+    private lateinit var tvHeaderStatusText: TextView
+
+    // View Containers (Separate Pages)
+    private lateinit var viewDashboard: View
+    private lateinit var viewStatements: View
+    private lateinit var viewActivities: View
+    private lateinit var viewSettings: View
+
+    // Sidebar Menu Items
+    private lateinit var menuNavDashboard: View
+    private lateinit var menuNavStatements: View
+    private lateinit var menuNavActivities: View
+    private lateinit var menuNavSettings: View
+
+    // Dashboard Views
     private lateinit var swServiceToggle: SwitchMaterial
-    private lateinit var ivStatusDot: ImageView
-    private lateinit var tvHeroStatus: TextView
+    private lateinit var tvHeroTitle: TextView
+    private lateinit var tvHeroSubtitle: TextView
     private lateinit var tvHeroBattery: TextView
     private lateinit var tvHeroNetwork: TextView
     private lateinit var tvHeroSim: TextView
-    private lateinit var tvHeroLastPing: TextView
 
     private lateinit var tvStatTodaySynced: TextView
+    private lateinit var tvStatCashIn: TextView
     private lateinit var tvStatFailed: TextView
     private lateinit var tvStatLastPlatform: TextView
 
-    private lateinit var etWebhookUrl: EditText
-    private lateinit var etApiKey: EditText
-    private lateinit var btnTestConnection: Button
-    private lateinit var btnSave: Button
-
     private lateinit var spSyncDays: Spinner
     private lateinit var btnSyncNow: Button
-    private lateinit var pbSyncProgress: ProgressBar
+    private lateinit var btnNavStatements: Button
+    private lateinit var btnTestPingHome: Button
 
+    // Statements Page Views
+    private lateinit var tvStatementCount: TextView
+    private lateinit var etSearchStatement: EditText
+    private lateinit var llStatementsContainer: LinearLayout
+    private lateinit var tvNoStatements: TextView
+
+    // Filter Chips
+    private lateinit var chipFilterAll: TextView
+    private lateinit var chipFilterBkash: TextView
+    private lateinit var chipFilterNagad: TextView
+    private lateinit var chipFilterRocket: TextView
+    private lateinit var chipFilterCashIn: TextView
+    private lateinit var chipFilterFailed: TextView
+    private var activeFilter = "ALL" // ALL, bKash, Nagad, Rocket, CashIn, Failed
+
+    // Activities Page Views
     private lateinit var tvTerminalLogs: TextView
     private lateinit var btnRefreshLogs: TextView
     private lateinit var btnClearLogs: TextView
 
-    private lateinit var llBatteryBanner: LinearLayout
-    private lateinit var btnFixBattery: Button
+    // Settings Page Views
+    private lateinit var etWebhookUrl: EditText
+    private lateinit var etApiKey: EditText
+    private lateinit var btnSaveSettings: Button
+    private lateinit var btnTestConnectionSettings: Button
 
+    // Sync Days Options
     private val daysOptions = arrayOf(
         "This Month (চলতি মাস)",
         "Last 1 Day",
@@ -83,11 +128,16 @@ class MainActivity : AppCompatActivity() {
         "All Payment SMS"
     )
 
-    // Broadcast receiver for real-time log updates
-    private val logReceiver = object : BroadcastReceiver() {
+    // Broadcast receiver for automatic real-time UI refresh (Zero click needed!)
+    private val realtimeUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            renderLogs()
             renderMetrics()
+            if (viewStatements.visibility == View.VISIBLE) {
+                renderStatements()
+            }
+            if (viewActivities.visibility == View.VISIBLE) {
+                renderLogs()
+            }
         }
     }
 
@@ -96,10 +146,14 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         initViews()
-        setupListeners()
-        loadConfig()
+        setupSidebarNavigation()
+        setupDashboardActions()
+        setupStatementsPage()
+        setupActivitiesPage()
+        setupSettingsPage()
+
         requestSystemPermissions()
-        checkBatteryOptimization()
+        loadConfig()
         updateDeviceTelemetry()
 
         // Auto-start background service if enabled
@@ -109,76 +163,158 @@ class MainActivity : AppCompatActivity() {
         }
 
         renderMetrics()
+        renderStatements()
         renderLogs()
     }
 
     override fun onResume() {
         super.onResume()
-        val filter = IntentFilter(GatewayLogger.ACTION_LOG_UPDATED)
+        val filter = IntentFilter().apply {
+            addAction(GatewayLogger.ACTION_LOG_UPDATED)
+            addAction(StatementManager.ACTION_STATEMENTS_UPDATED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(logReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(realtimeUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(logReceiver, filter)
+            registerReceiver(realtimeUpdateReceiver, filter)
         }
         updateDeviceTelemetry()
         renderMetrics()
+        renderStatements()
         renderLogs()
-        checkBatteryOptimization()
     }
 
     override fun onPause() {
         super.onPause()
         try {
-            unregisterReceiver(logReceiver)
+            unregisterReceiver(realtimeUpdateReceiver)
         } catch (e: Exception) {
-            // Receiver might not be registered
+            // Ignored
         }
     }
 
     private fun initViews() {
+        drawerLayout = findViewById(R.id.drawerLayout)
+        btnMenuToggle = findViewById(R.id.btnMenuToggle)
+        tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
+        ivHeaderStatusDot = findViewById(R.id.ivHeaderStatusDot)
+        tvHeaderStatusText = findViewById(R.id.tvHeaderStatusText)
+
+        // View Containers
+        viewDashboard = findViewById(R.id.viewDashboard)
+        viewStatements = findViewById(R.id.viewStatements)
+        viewActivities = findViewById(R.id.viewActivities)
+        viewSettings = findViewById(R.id.viewSettings)
+
+        // Sidebar Menu Items
+        menuNavDashboard = findViewById(R.id.menuNavDashboard)
+        menuNavStatements = findViewById(R.id.menuNavStatements)
+        menuNavActivities = findViewById(R.id.menuNavActivities)
+        menuNavSettings = findViewById(R.id.menuNavSettings)
+
+        // Dashboard Views
         swServiceToggle = findViewById(R.id.swServiceToggle)
-        ivStatusDot = findViewById(R.id.ivStatusDot)
-        tvHeroStatus = findViewById(R.id.tvHeroStatus)
+        tvHeroTitle = findViewById(R.id.tvHeroTitle)
+        tvHeroSubtitle = findViewById(R.id.tvHeroSubtitle)
         tvHeroBattery = findViewById(R.id.tvHeroBattery)
         tvHeroNetwork = findViewById(R.id.tvHeroNetwork)
         tvHeroSim = findViewById(R.id.tvHeroSim)
-        tvHeroLastPing = findViewById(R.id.tvHeroLastPing)
 
         tvStatTodaySynced = findViewById(R.id.tvStatTodaySynced)
+        tvStatCashIn = findViewById(R.id.tvStatCashIn)
         tvStatFailed = findViewById(R.id.tvStatFailed)
         tvStatLastPlatform = findViewById(R.id.tvStatLastPlatform)
 
-        etWebhookUrl = findViewById(R.id.etWebhookUrl)
-        etApiKey = findViewById(R.id.etApiKey)
-        btnTestConnection = findViewById(R.id.btnTestConnection)
-        btnSave = findViewById(R.id.btnSave)
-
         spSyncDays = findViewById(R.id.spSyncDays)
         btnSyncNow = findViewById(R.id.btnSyncNow)
-        pbSyncProgress = findViewById(R.id.pbSyncProgress)
+        btnNavStatements = findViewById(R.id.btnNavStatements)
+        btnTestPingHome = findViewById(R.id.btnTestPingHome)
 
+        // Statements Views
+        tvStatementCount = findViewById(R.id.tvStatementCount)
+        etSearchStatement = findViewById(R.id.etSearchStatement)
+        llStatementsContainer = findViewById(R.id.llStatementsContainer)
+        tvNoStatements = findViewById(R.id.tvNoStatements)
+
+        chipFilterAll = findViewById(R.id.chipFilterAll)
+        chipFilterBkash = findViewById(R.id.chipFilterBkash)
+        chipFilterNagad = findViewById(R.id.chipFilterNagad)
+        chipFilterRocket = findViewById(R.id.chipFilterRocket)
+        chipFilterCashIn = findViewById(R.id.chipFilterCashIn)
+        chipFilterFailed = findViewById(R.id.chipFilterFailed)
+
+        // Activities Views
         tvTerminalLogs = findViewById(R.id.tvTerminalLogs)
         btnRefreshLogs = findViewById(R.id.btnRefreshLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
 
-        llBatteryBanner = findViewById(R.id.llBatteryBanner)
-        btnFixBattery = findViewById(R.id.btnFixBattery)
+        // Settings Views
+        etWebhookUrl = findViewById(R.id.etWebhookUrl)
+        etApiKey = findViewById(R.id.etApiKey)
+        btnSaveSettings = findViewById(R.id.btnSaveSettings)
+        btnTestConnectionSettings = findViewById(R.id.btnTestConnectionSettings)
 
         // Spinner Setup
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, daysOptions)
         spSyncDays.adapter = adapter
     }
 
-    private fun setupListeners() {
+    private fun setupSidebarNavigation() {
+        btnMenuToggle.setOnClickListener {
+            if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                drawerLayout.closeDrawer(GravityCompat.START)
+            } else {
+                drawerLayout.openDrawer(GravityCompat.START)
+            }
+        }
+
+        menuNavDashboard.setOnClickListener {
+            switchPage("Dashboard")
+            drawerLayout.closeDrawer(GravityCompat.START)
+        }
+
+        menuNavStatements.setOnClickListener {
+            switchPage("Statements")
+            drawerLayout.closeDrawer(GravityCompat.START)
+        }
+
+        menuNavActivities.setOnClickListener {
+            switchPage("Activities")
+            drawerLayout.closeDrawer(GravityCompat.START)
+        }
+
+        menuNavSettings.setOnClickListener {
+            switchPage("Settings")
+            drawerLayout.closeDrawer(GravityCompat.START)
+        }
+    }
+
+    private fun switchPage(pageName: String) {
+        viewDashboard.visibility = if (pageName == "Dashboard") View.VISIBLE else View.GONE
+        viewStatements.visibility = if (pageName == "Statements") View.VISIBLE else View.GONE
+        viewActivities.visibility = if (pageName == "Activities") View.VISIBLE else View.GONE
+        viewSettings.visibility = if (pageName == "Settings") View.VISIBLE else View.GONE
+
+        tvHeaderTitle.text = when (pageName) {
+            "Statements" -> "Statements Ledger"
+            "Activities" -> "Live Activities"
+            "Settings" -> "API Settings"
+            else -> "M Track"
+        }
+
+        if (pageName == "Statements") renderStatements()
+        if (pageName == "Activities") renderLogs()
+    }
+
+    private fun setupDashboardActions() {
         val prefs = getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
 
-        // Master Service Switch
         swServiceToggle.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("service_enabled", isChecked).apply()
             if (isChecked) {
                 GatewayService.start(this)
                 updateServiceStatusUI(true)
-                GatewayLogger.log(this, "Gateway Service enabled by user", "SUCCESS", "SYSTEM")
+                GatewayLogger.log(this, "Gateway Service enabled (24/7 Active)", "SUCCESS", "SYSTEM")
             } else {
                 GatewayService.stop(this)
                 updateServiceStatusUI(false)
@@ -186,8 +322,98 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Save Configuration
-        btnSave.setOnClickListener {
+        btnSyncNow.setOnClickListener {
+            val selectedIndex = spSyncDays.selectedItemPosition
+            startBulkSyncWithProgress(selectedIndex)
+        }
+
+        btnNavStatements.setOnClickListener {
+            switchPage("Statements")
+        }
+
+        btnTestPingHome.setOnClickListener {
+            triggerTestPing()
+        }
+    }
+
+    private fun setupStatementsPage() {
+        // Search Filter TextWatcher
+        etSearchStatement.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                renderStatements()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        // Filter Chips Click Listeners
+        val chips = listOf(chipFilterAll, chipFilterBkash, chipFilterNagad, chipFilterRocket, chipFilterCashIn, chipFilterFailed)
+        fun resetChipStyles() {
+            chips.forEach { chip ->
+                chip.setBackgroundResource(R.drawable.bg_chip_flat)
+            }
+        }
+
+        chipFilterAll.setOnClickListener {
+            activeFilter = "ALL"
+            resetChipStyles()
+            chipFilterAll.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+
+        chipFilterBkash.setOnClickListener {
+            activeFilter = "bKash"
+            resetChipStyles()
+            chipFilterBkash.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+
+        chipFilterNagad.setOnClickListener {
+            activeFilter = "Nagad"
+            resetChipStyles()
+            chipFilterNagad.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+
+        chipFilterRocket.setOnClickListener {
+            activeFilter = "Rocket"
+            resetChipStyles()
+            chipFilterRocket.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+
+        chipFilterCashIn.setOnClickListener {
+            activeFilter = "CashIn"
+            resetChipStyles()
+            chipFilterCashIn.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+
+        chipFilterFailed.setOnClickListener {
+            activeFilter = "Failed"
+            resetChipStyles()
+            chipFilterFailed.setBackgroundColor(ContextCompat.getColor(this, R.color.brand_primary_subtle))
+            renderStatements()
+        }
+    }
+
+    private fun setupActivitiesPage() {
+        btnRefreshLogs.setOnClickListener {
+            renderLogs()
+            Toast.makeText(this, "Logs Refreshed", Toast.LENGTH_SHORT).show()
+        }
+
+        btnClearLogs.setOnClickListener {
+            GatewayLogger.clearLogs(this)
+            renderLogs()
+            Toast.makeText(this, "Logs Cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupSettingsPage() {
+        val prefs = getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
+
+        btnSaveSettings.setOnClickListener {
             val url = etWebhookUrl.text.toString().trim()
             val key = etApiKey.text.toString().trim()
 
@@ -200,47 +426,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Test Connection Ping
-        btnTestConnection.setOnClickListener {
-            Toast.makeText(this, "Sending Test Ping to Webhook...", Toast.LENGTH_SHORT).show()
-            GatewayLogger.log(this, "Test Connection initiated...", "INFO", "SYSTEM")
-
-            val inputData = Data.Builder()
-                .putString("action", "test_ping")
-                .putString("sender", "TEST_PING")
-                .putString("message", "PING_VERIFICATION_TEST")
-                .build()
-
-            val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setInputData(inputData)
-                .build()
-
-            WorkManager.getInstance(this).enqueue(workRequest)
+        btnTestConnectionSettings.setOnClickListener {
+            triggerTestPing()
         }
+    }
 
-        // Manual Historical Sync
-        btnSyncNow.setOnClickListener {
-            val selectedIndex = spSyncDays.selectedItemPosition
-            syncHistoricalSMS(selectedIndex)
-        }
+    private fun triggerTestPing() {
+        Toast.makeText(this, "Sending Test Ping to Webhook...", Toast.LENGTH_SHORT).show()
+        GatewayLogger.log(this, "Test Connection ping initiated...", "INFO", "SYSTEM")
 
-        // Logs Actions
-        btnRefreshLogs.setOnClickListener {
-            renderLogs()
-            renderMetrics()
-            Toast.makeText(this, "Logs Refreshed", Toast.LENGTH_SHORT).show()
-        }
+        val inputData = Data.Builder()
+            .putString("action", "test_ping")
+            .putString("sender", "TEST_PING")
+            .putString("message", "PING_VERIFICATION_TEST")
+            .build()
 
-        btnClearLogs.setOnClickListener {
-            GatewayLogger.clearLogs(this)
-            renderLogs()
-            Toast.makeText(this, "Logs Cleared", Toast.LENGTH_SHORT).show()
-        }
+        val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(inputData)
+            .build()
 
-        // Battery Banner Fix
-        btnFixBattery.setOnClickListener {
-            requestIgnoreBatteryOptimization()
-        }
+        WorkManager.getInstance(this).enqueue(workRequest)
     }
 
     private fun loadConfig() {
@@ -255,18 +460,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateServiceStatusUI(isRunning: Boolean) {
         if (isRunning) {
-            ivStatusDot.setImageResource(R.drawable.ic_dot_green)
-            tvHeroStatus.text = "Gateway Active & Listening"
-            tvHeroStatus.setTextColor(ContextCompat.getColor(this, R.color.white))
+            ivHeaderStatusDot.setImageResource(R.drawable.ic_dot_green)
+            tvHeaderStatusText.text = "Live"
+            tvHeaderStatusText.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+
+            tvHeroTitle.text = "Gateway Service Active"
+            tvHeroTitle.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+            tvHeroSubtitle.text = "24/7 Listening for bKash, Nagad, Rocket (16216)"
         } else {
-            ivStatusDot.setImageResource(R.drawable.ic_dot_red)
-            tvHeroStatus.text = "Gateway Paused (Offline)"
-            tvHeroStatus.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            ivHeaderStatusDot.setImageResource(R.drawable.ic_dot_red)
+            tvHeaderStatusText.text = "Paused"
+            tvHeaderStatusText.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+
+            tvHeroTitle.text = "Gateway Service Paused"
+            tvHeroTitle.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+            tvHeroSubtitle.text = "Turn switch on to enable automatic relaying"
         }
     }
 
     private fun updateDeviceTelemetry() {
-        // Battery
         val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
@@ -274,10 +486,8 @@ class MainActivity : AppCompatActivity() {
 
         val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-
         tvHeroBattery.text = if (isCharging) "⚡ $batteryPct% Charging" else "🔋 $batteryPct% Battery"
 
-        // Network
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = cm.activeNetwork
         val caps = cm.getNetworkCapabilities(network)
@@ -288,27 +498,133 @@ class MainActivity : AppCompatActivity() {
             else -> "📶 Connected"
         }
         tvHeroNetwork.text = netType
-
-        // SIM
         tvHeroSim.text = "📱 SIM Ready"
-
-        // Stats
-        val stats = getSharedPreferences("GatewayStats", Context.MODE_PRIVATE)
-        val lastPing = stats.getString("last_sync_time", "Just now")
-        tvHeroLastPing.text = "Heartbeat & Relay: Active • Last: $lastPing"
     }
 
     private fun renderMetrics() {
         val stats = getSharedPreferences("GatewayStats", Context.MODE_PRIVATE)
-        tvStatTodaySynced.text = stats.getInt("today_synced", 0).toString()
-        tvStatFailed.text = stats.getInt("today_failed", 0).toString()
-        tvStatLastPlatform.text = stats.getString("last_platform", "None")
+        val todaySynced = stats.getInt("today_synced", 0)
+        val todayFailed = stats.getInt("today_failed", 0)
+        val lastPlatform = stats.getString("last_platform", "bKash")
+
+        tvStatTodaySynced.text = todaySynced.toString()
+        tvStatFailed.text = todayFailed.toString()
+        tvStatLastPlatform.text = lastPlatform
+
+        // Count Cash In from StatementManager
+        val allStatements = StatementManager.getStatements(this)
+        val cashInCount = allStatements.count { it.type.contains("Cash In", ignoreCase = true) }
+        tvStatCashIn.text = cashInCount.toString()
+    }
+
+    private fun renderStatements() {
+        val all = StatementManager.getStatements(this)
+        val query = etSearchStatement.text.toString().trim().lowercase()
+
+        // Filter based on active chip & search text
+        val filtered = all.filter { st ->
+            val matchChip = when (activeFilter) {
+                "bKash" -> st.platform.equals("bKash", ignoreCase = true)
+                "Nagad" -> st.platform.equals("Nagad", ignoreCase = true)
+                "Rocket" -> st.platform.equals("Rocket", ignoreCase = true)
+                "CashIn" -> st.type.contains("Cash In", ignoreCase = true)
+                "Failed" -> st.status == "FAILED" || st.status == "PENDING"
+                else -> true
+            }
+
+            val matchQuery = if (query.isEmpty()) true else {
+                st.trxId.lowercase().contains(query) ||
+                st.sender.lowercase().contains(query) ||
+                st.amount.lowercase().contains(query) ||
+                st.platform.lowercase().contains(query)
+            }
+
+            matchChip && matchQuery
+        }
+
+        tvStatementCount.text = "${filtered.size} records"
+        llStatementsContainer.removeAllViews()
+
+        if (filtered.isEmpty()) {
+            tvNoStatements.visibility = View.VISIBLE
+            llStatementsContainer.addView(tvNoStatements)
+            return
+        }
+
+        tvNoStatements.visibility = View.GONE
+        val inflater = LayoutInflater.from(this)
+
+        for (st in filtered) {
+            val cardView = inflater.inflate(R.layout.item_statement_card, llStatementsContainer, false)
+
+            val tvPlatform = cardView.findViewById<TextView>(R.id.tvCardPlatform)
+            val tvType = cardView.findViewById<TextView>(R.id.tvCardType)
+            val tvStatus = cardView.findViewById<TextView>(R.id.tvCardStatus)
+            val tvAmount = cardView.findViewById<TextView>(R.id.tvCardAmount)
+            val tvTrxId = cardView.findViewById<TextView>(R.id.tvCardTrxId)
+            val tvSender = cardView.findViewById<TextView>(R.id.tvCardSender)
+            val tvDate = cardView.findViewById<TextView>(R.id.tvCardDate)
+            val btnCopyTrx = cardView.findViewById<View>(R.id.btnCopyTrx)
+            val btnCardRetry = cardView.findViewById<TextView>(R.id.btnCardRetry)
+
+            tvPlatform.text = st.platform
+            when (st.platform.lowercase()) {
+                "bkash" -> tvPlatform.setTextColor(ContextCompat.getColor(this, R.color.operator_bkash))
+                "nagad" -> tvPlatform.setTextColor(ContextCompat.getColor(this, R.color.operator_nagad))
+                "rocket" -> tvPlatform.setTextColor(ContextCompat.getColor(this, R.color.operator_rocket))
+            }
+
+            tvType.text = st.type
+            tvAmount.text = "৳ ${st.amount}"
+            tvTrxId.text = st.trxId
+            tvSender.text = if (st.sender.isNotEmpty()) st.sender else "N/A"
+            tvDate.text = st.date
+
+            if (st.status == "SYNCED") {
+                tvStatus.text = "✓ Synced"
+                tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+                btnCardRetry.visibility = View.GONE
+            } else {
+                tvStatus.text = "✕ Failed"
+                tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_danger))
+                btnCardRetry.visibility = View.VISIBLE
+                btnCardRetry.setOnClickListener {
+                    retrySingleStatement(st)
+                }
+            }
+
+            btnCopyTrx.setOnClickListener {
+                copyTextToClipboard(st.trxId, "TrxID Copied!")
+            }
+
+            llStatementsContainer.addView(cardView)
+        }
+    }
+
+    private fun retrySingleStatement(st: PaymentStatement) {
+        Toast.makeText(this, "Retrying sync for Trx: ${st.trxId}...", Toast.LENGTH_SHORT).show()
+        val inputData = Data.Builder()
+            .putString("sender", st.sender)
+            .putString("message", st.rawMessage.ifEmpty { "Cash In/Payment of Tk ${st.amount} TrxID ${st.trxId}" })
+            .putString("platform", st.platform)
+            .putString("type", st.type)
+            .putString("trx_id", st.trxId)
+            .putString("amount", st.amount)
+            .putString("sms_date", st.date)
+            .putString("action", "retry_sync")
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(inputData)
+            .build()
+
+        WorkManager.getInstance(this).enqueue(workRequest)
     }
 
     private fun renderLogs() {
         val logs = GatewayLogger.getLogs(this)
         if (logs.isEmpty()) {
-            tvTerminalLogs.text = "[READY] Gateway listening for bKash, Nagad, Rocket SMS...\n[LOG] No recent transactions recorded."
+            tvTerminalLogs.text = "[READY] Gateway listening for bKash, Nagad, Rocket (16216) incoming SMS...\n[LOG] No recent transactions recorded."
             return
         }
 
@@ -335,13 +651,14 @@ class MainActivity : AppCompatActivity() {
         tvTerminalLogs.text = builder
     }
 
-    private fun syncHistoricalSMS(optionIndex: Int) {
+    /**
+     * DYNAMIC LIVE SYNC PROGRESS DIALOG (Solves the "No progress visible" problem!)
+     */
+    private fun startBulkSyncWithProgress(optionIndex: Int) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "READ_SMS permission is required!", Toast.LENGTH_SHORT).show()
             return
         }
-
-        pbSyncProgress.visibility = View.VISIBLE
 
         val calendar = Calendar.getInstance()
         val timeInMillis: Long
@@ -349,14 +666,13 @@ class MainActivity : AppCompatActivity() {
 
         when (optionIndex) {
             0 -> {
-                // This Month (চলতি মাসের ১ তারিখ ০০:০০:০০ থেকে)
                 calendar.set(Calendar.DAY_OF_MONTH, 1)
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
                 calendar.set(Calendar.MILLISECOND, 0)
                 timeInMillis = calendar.timeInMillis
-                label = "This Month (চলতি মাস)"
+                label = "This Month"
             }
             1 -> {
                 calendar.add(Calendar.DAY_OF_YEAR, -1)
@@ -385,49 +701,100 @@ class MainActivity : AppCompatActivity() {
             }
             else -> {
                 timeInMillis = 0L
-                label = "All Payment SMS"
+                label = "All Time"
             }
         }
 
-        val cursor: Cursor? = contentResolver.query(
-            Telephony.Sms.Inbox.CONTENT_URI,
-            arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
-            if (timeInMillis > 0) "${Telephony.Sms.DATE} >= ?" else null,
-            if (timeInMillis > 0) arrayOf(timeInMillis.toString()) else null,
-            "${Telephony.Sms.DATE} DESC"
-        )
+        // Show Dynamic Progress Dialog
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_sync_progress, null)
+        val tvProgressStatus = dialogView.findViewById<TextView>(R.id.tvProgressStatus)
+        val tvProgressPercent = dialogView.findViewById<TextView>(R.id.tvProgressPercent)
+        val tvProgressItem = dialogView.findViewById<TextView>(R.id.tvProgressItem)
+        val pbSyncDialog = dialogView.findViewById<ProgressBar>(R.id.pbSyncDialog)
+        val btnProgressDismiss = dialogView.findViewById<Button>(R.id.btnProgressDismiss)
 
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        var count = 0
-        var skippedNonPayment = 0
+        val progressDialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
 
-        cursor?.use {
-            val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
-            val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
-            val dateIdx = it.getColumnIndex(Telephony.Sms.DATE)
+        progressDialog.show()
 
-            while (it.moveToNext()) {
-                val sender = it.getString(addressIdx) ?: ""
-                val body = it.getString(bodyIdx) ?: ""
-                val smsTimestamp = if (dateIdx != -1) it.getLong(dateIdx) else System.currentTimeMillis()
+        btnProgressDismiss.setOnClickListener {
+            progressDialog.dismiss()
+        }
 
-                // Smart filter: only process payment related messages
-                if (!isPaymentMessage(sender, body)) {
-                    skippedNonPayment++
-                    continue
+        // Run SMS query on background thread
+        Thread {
+            val cursor: Cursor? = contentResolver.query(
+                Telephony.Sms.Inbox.CONTENT_URI,
+                arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+                if (timeInMillis > 0) "${Telephony.Sms.DATE} >= ?" else null,
+                if (timeInMillis > 0) arrayOf(timeInMillis.toString()) else null,
+                "${Telephony.Sms.DATE} ASC" // Process oldest to newest
+            )
+
+            val validPayments = mutableListOf<ParsedPaymentItem>()
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+            cursor?.use {
+                val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
+                val dateIdx = it.getColumnIndex(Telephony.Sms.DATE)
+
+                while (it.moveToNext()) {
+                    val sender = it.getString(addressIdx) ?: ""
+                    val body = it.getString(bodyIdx) ?: ""
+                    val smsTimestamp = if (dateIdx != -1) it.getLong(dateIdx) else System.currentTimeMillis()
+
+                    // Strict Payment Filter: Drops Outgoing (bKash to Bank, Cash Out) and Rocket non-16216
+                    val parsed = PaymentFilter.parse(sender, body)
+                    if (parsed.isValid) {
+                        validPayments.add(
+                            ParsedPaymentItem(
+                                sender = sender,
+                                body = body,
+                                parsed = parsed,
+                                timestamp = smsTimestamp,
+                                formattedDate = dateFormat.format(Date(smsTimestamp))
+                            )
+                        )
+                    }
                 }
+            }
 
-                val platform = detectPlatform(sender, body)
-                val type = detectType(body)
-                val formattedDate = dateFormat.format(Date(smsTimestamp))
+            val total = validPayments.size
+            val mainHandler = Handler(Looper.getMainLooper())
 
+            if (total == 0) {
+                mainHandler.post {
+                    tvProgressStatus.text = "No incoming payment SMS found for $label"
+                    tvProgressItem.text = "Completed (0 items)"
+                    btnProgressDismiss.text = "Done"
+                }
+                return@Thread
+            }
+
+            mainHandler.post {
+                tvProgressStatus.text = "Found $total payment SMS. Relaying to ERP..."
+                pbSyncDialog.max = total
+            }
+
+            // Relay items with a 350ms throttle to prevent Apache server rate-limit blocks
+            for ((index, item) in validPayments.withIndex()) {
+                val current = index + 1
+                val percent = (current * 100) / total
+
+                // Enqueue work
                 val inputData = Data.Builder()
-                    .putString("sender", sender)
-                    .putString("message", body)
-                    .putString("platform", platform)
-                    .putString("type", type)
-                    .putString("sms_date", formattedDate)
-                    .putString("sms_timestamp", smsTimestamp.toString())
+                    .putString("sender", item.sender)
+                    .putString("message", item.body)
+                    .putString("platform", item.parsed.platform)
+                    .putString("type", item.parsed.type)
+                    .putString("trx_id", item.parsed.trxId)
+                    .putString("amount", item.parsed.amount)
+                    .putString("sms_date", item.formattedDate)
+                    .putString("sms_timestamp", item.timestamp.toString())
                     .putString("action", "historical_sync")
                     .build()
 
@@ -436,82 +803,55 @@ class MainActivity : AppCompatActivity() {
                     .build()
 
                 WorkManager.getInstance(this).enqueue(workRequest)
-                count++
-            }
-        }
 
-        pbSyncProgress.visibility = View.GONE
-        GatewayLogger.log(this, "Queued $count payment SMS for $label (Filtered out $skippedNonPayment non-payment SMS)", "INFO", "SYSTEM")
-        Toast.makeText(this, "Queued $count payment SMS ($label) with original timestamps!", Toast.LENGTH_LONG).show()
-    }
+                // Record in StatementManager as PENDING/QUEUED
+                StatementManager.recordStatement(
+                    context = this,
+                    trxId = item.parsed.trxId,
+                    platform = item.parsed.platform,
+                    type = item.parsed.type,
+                    sender = item.parsed.senderNumber,
+                    amount = item.parsed.amount,
+                    date = item.formattedDate,
+                    status = "PENDING",
+                    rawMessage = item.body
+                )
 
-    private fun isPaymentMessage(sender: String, body: String): Boolean {
-        val s = sender.lowercase()
-        val b = body.lowercase()
-
-        // Senders: bKash, Nagad (16167), Rocket (16216, dbbl), Upay, etc.
-        val isKnownSender = s.contains("bkash") || s == "16247" ||
-                s.contains("nagad") || s == "16167" ||
-                s.contains("rocket") || s == "16216" || s.contains("dbbl") ||
-                s.contains("upay")
-
-        // Keywords in body: TrxID, TxnID, Cash In, Payment, Tk, Received
-        val hasPaymentKeywords = (b.contains("trxid") || b.contains("txnid") || b.contains("txn id") ||
-                b.contains("cash in") || b.contains("cash-in") || b.contains("payment") ||
-                b.contains("received tk") || b.contains("you have received")) &&
-                (b.contains("tk") || b.contains("bdt"))
-
-        return isKnownSender || hasPaymentKeywords
-    }
-
-    private fun detectPlatform(sender: String, body: String): String {
-        val s = sender.lowercase()
-        val b = body.lowercase()
-
-        return when {
-            s.contains("bkash") || s == "16247" || b.contains("bkash") -> "bKash"
-            s.contains("nagad") || s == "16167" || b.contains("nagad") -> "Nagad"
-            s.contains("rocket") || s == "16216" || b.contains("rocket") || s.contains("dbbl") -> "Rocket"
-            s.contains("upay") || b.contains("upay") -> "Upay"
-            else -> "bKash"
-        }
-    }
-
-    private fun detectType(body: String): String {
-        val b = body.lowercase()
-        return when {
-            b.contains("cash in") || b.contains("cash-in") -> "Cash In"
-            b.contains("merchant") || b.contains("payment to") || b.contains("payment tk") -> "Merchant"
-            else -> "Receive Money"
-        }
-    }
-
-    private fun checkBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            val isIgnoring = pm.isIgnoringBatteryOptimizations(packageName)
-            llBatteryBanner.visibility = if (isIgnoring) View.GONE else View.VISIBLE
-        } else {
-            llBatteryBanner.visibility = View.GONE
-        }
-    }
-
-    @SuppressLint("BatteryLife")
-    private fun requestIgnoreBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
+                mainHandler.post {
+                    pbSyncDialog.progress = current
+                    tvProgressPercent.text = "$percent%"
+                    tvProgressItem.text = "$current / $total • ${item.parsed.platform} ৳${item.parsed.amount} [${item.parsed.trxId}]"
                 }
-                startActivity(intent)
-            } catch (e: Exception) {
+
                 try {
-                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                } catch (e2: Exception) {
-                    Toast.makeText(this, "Please disable battery optimization in device settings", Toast.LENGTH_LONG).show()
-                }
+                    Thread.sleep(350) // 350ms throttle protects Apache IP ban
+                } catch (e: Exception) {}
             }
-        }
+
+            mainHandler.post {
+                tvProgressStatus.text = "✅ Successfully queued $total SMS to ERP!"
+                btnProgressDismiss.text = "Done"
+                GatewayLogger.log(this, "Bulk sync queued: $total payment SMS ($label)", "SUCCESS", "SYSTEM")
+                renderStatements()
+                renderMetrics()
+            }
+        }.start()
+    }
+
+    private data class ParsedPaymentItem(
+        val sender: String,
+        val body: String,
+        val parsed: ParsedPayment,
+        val timestamp: Long,
+        val formattedDate: String
+    )
+
+    private fun copyTextToClipboard(text: String, toastMsg: String) {
+        if (text.isEmpty() || text == "N/A") return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("TrxID", text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
     }
 
     private fun requestSystemPermissions() {
@@ -527,15 +867,15 @@ class MainActivity : AppCompatActivity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        val listPermissionsNeeded = ArrayList<String>()
+        val listNeeded = ArrayList<String>()
         for (p in permissions) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                listPermissionsNeeded.add(p)
+                listNeeded.add(p)
             }
         }
 
-        if (listPermissionsNeeded.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, listPermissionsNeeded.toTypedArray(), 101)
+        if (listNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, listNeeded.toTypedArray(), 101)
         }
     }
 }
