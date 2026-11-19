@@ -20,11 +20,11 @@ object PaymentFilter {
     )
 
     private val SENDER_REGEX = Pattern.compile(
-        "(?:from|customer[\\s:]*|sender[\\s:]*|payer[\\s:]*|a\\/c[\\s:]*|account[\\s:]*|by)[\\s:]*(\\+?(?:88)?01[3-9][0-9*xX\\-]{5,12})",
+        "(?:from\\s+(?:a\\/c|account)?[\\s:]*|from\\s+agent[\\s:]*|customer[\\s:]*|sender[\\s:]*|payer[\\s:]*|by[\\s:]*|from[\\s:]+)([\\+0-9*xX\\-]{3,18})",
         Pattern.CASE_INSENSITIVE
     )
     private val SENDER_FALLBACK_REGEX = Pattern.compile(
-        "(\\+?(?:88)?01[3-9][0-9*xX\\-]{5,12})",
+        "(\\+?(?:88)?01[3-9][0-9*xX\\-]{5,12}|\\*{2,}[0-9*xX\\-]{2,10})",
         Pattern.CASE_INSENSITIVE
     )
     private val TRX_REGEX = Pattern.compile("(?:TrxID|TxnID|Txn\\s*Id|Trx\\s*Id)[\\s:]*([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
@@ -99,9 +99,14 @@ object PaymentFilter {
         // 6. Extract Sender Mobile Number (As-Is: Full, Masked 0171***789, +88, Rocket 12-digit)
         var customerPhone = ""
         val senderMatcher = SENDER_REGEX.matcher(b)
-        if (senderMatcher.find()) {
-            customerPhone = senderMatcher.group(1)?.trim() ?: ""
-        } else {
+        while (senderMatcher.find()) {
+            val cand = senderMatcher.group(1)?.trim() ?: ""
+            if (cand.isNotEmpty() && !cand.equals(trxId, ignoreCase = true)) {
+                customerPhone = cand
+                break
+            }
+        }
+        if (customerPhone.isEmpty()) {
             // Fallback: search for any phone pattern in message that is not TrxID
             val fallbackMatcher = SENDER_FALLBACK_REGEX.matcher(b)
             while (fallbackMatcher.find()) {
