@@ -43,7 +43,46 @@ object StatementManager {
     const val ACTION_STATEMENTS_UPDATED = "com.mtrack.sms_gateway.ACTION_STATEMENTS_UPDATED"
     private const val PREFS_NAME = "MTrackStatements"
     private const val KEY_STATEMENTS = "statement_list"
+    private const val KEY_LAST_SYNC_TIME = "last_sync_timestamp"
     private const val MAX_STATEMENTS = 1000
+
+    fun setLastSyncTime(context: Context, time: Long = System.currentTimeMillis()) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putLong(KEY_LAST_SYNC_TIME, time).apply()
+            context.sendBroadcast(Intent(ACTION_STATEMENTS_UPDATED))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getLastSyncTime(context: Context): Long {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    fun getFormattedLastSyncTime(context: Context): String {
+        val timestamp = getLastSyncTime(context)
+        if (timestamp <= 0L) return "Never synced"
+        val now = System.currentTimeMillis()
+        val diff = now - timestamp
+        return when {
+            diff < 45_000 -> "Just now"
+            diff < 3600_000 -> "${diff / 60_000}m ago"
+            android.text.format.DateUtils.isToday(timestamp) -> {
+                val timeFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                "Today, ${timeFormat.format(java.util.Date(timestamp))}"
+            }
+            else -> {
+                val dateFormat = java.text.SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault())
+                dateFormat.format(java.util.Date(timestamp))
+            }
+        }
+    }
 
     fun recordStatement(
         context: Context,
@@ -110,7 +149,11 @@ object StatementManager {
                 }
             }
 
-            prefs.edit().putString(KEY_STATEMENTS, updatedArray.toString()).apply()
+            val editor = prefs.edit().putString(KEY_STATEMENTS, updatedArray.toString())
+            if (status.equals("SYNCED", ignoreCase = true)) {
+                editor.putLong(KEY_LAST_SYNC_TIME, System.currentTimeMillis())
+            }
+            editor.apply()
 
             // Broadcast update to UI
             context.sendBroadcast(Intent(ACTION_STATEMENTS_UPDATED))

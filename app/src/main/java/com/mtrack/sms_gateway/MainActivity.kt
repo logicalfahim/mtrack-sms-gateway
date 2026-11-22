@@ -85,6 +85,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvHeroBattery: TextView
     private lateinit var tvHeroNetwork: TextView
     private lateinit var tvHeroSim: TextView
+    private lateinit var tvHeroLastSync: TextView
+    private lateinit var tvHeroSyncStatus: TextView
 
     private lateinit var tvStatTodaySynced: TextView
     private lateinit var tvStatCashIn: TextView
@@ -93,6 +95,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var spSyncDays: Spinner
     private lateinit var btnSyncNow: Button
+    private lateinit var tvLastBulkSync: TextView
     private lateinit var btnNavStatements: Button
     private lateinit var btnTestPingHome: Button
 
@@ -275,6 +278,8 @@ class MainActivity : AppCompatActivity() {
         tvHeroBattery = findViewById(R.id.tvHeroBattery)
         tvHeroNetwork = findViewById(R.id.tvHeroNetwork)
         tvHeroSim = findViewById(R.id.tvHeroSim)
+        tvHeroLastSync = findViewById(R.id.tvHeroLastSync)
+        tvHeroSyncStatus = findViewById(R.id.tvHeroSyncStatus)
 
         tvStatTodaySynced = findViewById(R.id.tvStatTodaySynced)
         tvStatCashIn = findViewById(R.id.tvStatCashIn)
@@ -283,6 +288,7 @@ class MainActivity : AppCompatActivity() {
 
         spSyncDays = findViewById(R.id.spSyncDays)
         btnSyncNow = findViewById(R.id.btnSyncNow)
+        tvLastBulkSync = findViewById(R.id.tvLastBulkSync)
         btnNavStatements = findViewById(R.id.btnNavStatements)
         btnTestPingHome = findViewById(R.id.btnTestPingHome)
 
@@ -1085,6 +1091,23 @@ $serviceStatus
         val allStatements = StatementManager.getStatements(this)
         val cashInCount = allStatements.count { it.type.contains("Cash In", ignoreCase = true) }
         tvStatCashIn.text = cashInCount.toString()
+
+        // Update Last Sync Indicators
+        val lastSyncText = StatementManager.getFormattedLastSyncTime(this)
+        tvHeroLastSync.text = lastSyncText
+        tvLastBulkSync.text = "Last Full Sync: $lastSyncText"
+
+        val lastSyncTs = StatementManager.getLastSyncTime(this)
+        if (lastSyncTs > 0 && (System.currentTimeMillis() - lastSyncTs) < 300_000) {
+            tvHeroSyncStatus.text = "Up to date"
+            tvHeroSyncStatus.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        } else if (lastSyncTs > 0) {
+            tvHeroSyncStatus.text = "Active"
+            tvHeroSyncStatus.setTextColor(ContextCompat.getColor(this, R.color.brand_primary))
+        } else {
+            tvHeroSyncStatus.text = "Ready"
+            tvHeroSyncStatus.setTextColor(ContextCompat.getColor(this, R.color.status_online))
+        }
     }
 
     private fun renderStatements() {
@@ -1414,6 +1437,7 @@ $serviceStatus
                 tvProgressStatus.text = "✅ Successfully queued $total SMS to ERP!"
                 btnProgressDismiss.text = "Done"
                 GatewayLogger.log(this, "Bulk sync queued: $total payment SMS ($label)", "SUCCESS", "SYSTEM")
+                StatementManager.setLastSyncTime(this)
                 renderStatements()
                 renderMetrics()
             }
