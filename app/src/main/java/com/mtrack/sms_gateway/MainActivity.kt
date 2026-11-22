@@ -640,7 +640,7 @@ class MainActivity : AppCompatActivity() {
                             .putString("amount", parsed.amount)
                             .putString("sms_date", formattedDate)
                             .putString("sms_timestamp", smsTimestamp.toString())
-                            .putString("action", "pull_refresh_sync")
+                            .putString("action", "realtime_sms")
                             .build()
 
                         val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
@@ -1192,7 +1192,7 @@ $serviceStatus
             .putString("trx_id", st.trxId)
             .putString("amount", st.amount)
             .putString("sms_date", st.date)
-            .putString("action", "retry_sync")
+            .putString("action", "realtime_sms")
             .build()
 
         val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
@@ -1377,7 +1377,7 @@ $serviceStatus
                     .putString("amount", item.parsed.amount)
                     .putString("sms_date", item.formattedDate)
                     .putString("sms_timestamp", item.timestamp.toString())
-                    .putString("action", "historical_sync")
+                    .putString("action", "realtime_sms")
                     .build()
 
                 val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()

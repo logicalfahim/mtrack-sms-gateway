@@ -333,7 +333,7 @@ class GatewayService : android.app.Service() {
                     .putString("trx_id", st.trxId)
                     .putString("amount", st.amount)
                     .putString("sms_date", st.date)
-                    .putString("action", "offline_retry_sync")
+                    .putString("action", "realtime_sms")
                     .build()
 
                 val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
