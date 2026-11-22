@@ -32,17 +32,9 @@ jobs:
     - name: Build Debug APK
       run: |
         if ! ./gradlew assembleDebug --stacktrace > build.log 2>&1; then
-          LINE=$(grep -n "processDebugResources" build.log | cut -d: -f1 | head -n 1)
-          if [ -n "$LINE" ]; then
-            START=$((LINE > 20 ? LINE - 20 : 1))
-            sed -n "${START},$((LINE + 30))p" build.log | while IFS= read -r l; do
-              echo "::error title=AAPT::$l"
-            done
-          else
-            grep -i "error" build.log | head -n 30 | while IFS= read -r l; do
-              echo "::error title=ERR::$l"
-            done
-          fi
+          grep -A 25 "processDebugResources FAILED" build.log | while IFS= read -r l; do
+            echo "::error title=ResourceError::$l"
+          done
           exit 1
         fi
 
