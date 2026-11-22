@@ -32,8 +32,8 @@ jobs:
     - name: Build Debug APK
       run: |
         if ! ./gradlew assembleDebug --stacktrace > build.log 2>&1; then
-          grep -n -C 4 -E "Execution failed for task|e: |Compilation error|AAPT:|FAILED" build.log | head -n 40 | while IFS= read -r line; do
-            echo "::error title=BuildError::$line"
+          head -n 40 build.log | while IFS= read -r line; do
+            echo "::error title=AAPT::$line"
           done
           exit 1
         fi
