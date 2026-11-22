@@ -30,13 +30,20 @@ class SmsReceiver : BroadcastReceiver() {
                 // Drops any outgoing SMS (e.g. bKash to Bank, Cash Out) and non-bKash/Nagad/Rocket SMS
                 // Rocket is strictly sender 16216
                 val parsed = PaymentFilter.parse(sender, messageBody)
-                if (!parsed.isValid) {
+                if (!parsed.isValid || parsed.trxId.isEmpty()) {
                     Log.d("SmsReceiver", "Ignored non-incoming/non-payment SMS from: $sender")
+                    continue
+                }
+
+                // Check deduplication (avoids double-sync if ContentObserver also catches this SMS)
+                if (!DeduplicationManager.markIfNew(parsed.trxId)) {
+                    Log.d("SmsReceiver", "Skipping duplicate TrxID: ${parsed.trxId}")
                     continue
                 }
 
                 val timestamp = if (sms.timestampMillis > 0) sms.timestampMillis else System.currentTimeMillis()
                 val formattedDate = dateFormat.format(Date(timestamp))
+                val resolvedSender = if (parsed.senderNumber.isNotEmpty()) parsed.senderNumber else sender
 
                 Log.d("SmsReceiver", "Incoming Payment: ${parsed.platform} [${parsed.type}, Trx: ${parsed.trxId}, Tk ${parsed.amount}]")
 
@@ -48,13 +55,16 @@ class SmsReceiver : BroadcastReceiver() {
                     parsed.platform
                 )
 
+                // Announce payment via voice/audio alert
+                PaymentVoiceNotifier.speakPayment(context, parsed.platform, parsed.amount)
+
                 // Record in Statements Ledger as PENDING
                 StatementManager.recordStatement(
                     context = context,
                     trxId = parsed.trxId,
                     platform = parsed.platform,
                     type = parsed.type,
-                    sender = parsed.senderNumber,
+                    sender = resolvedSender,
                     amount = parsed.amount,
                     date = formattedDate,
                     status = "PENDING",

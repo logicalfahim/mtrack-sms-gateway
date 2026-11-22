@@ -154,6 +154,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTestConnectionSettings: Button
     private lateinit var btnClearFailedStatements: Button
     private lateinit var btnClearAllStatements: Button
+    private lateinit var swVoiceAlert: SwitchMaterial
+    private lateinit var btnTestVoice: Button
+    private lateinit var swBiometricLock: SwitchMaterial
+    private lateinit var btnTestBiometric: Button
+    private lateinit var spAutoCleanDays: Spinner
+    private lateinit var btnClean30Days: Button
+    private lateinit var btnRunDiagnostics: Button
 
     // Sync Days Options (Pure English)
     private val daysOptions = arrayOf(
@@ -223,6 +230,7 @@ class MainActivity : AppCompatActivity() {
         renderStatements()
         renderLogs()
         checkAndRenderPermissions()
+        showAppLockPromptIfNeeded()
     }
 
     override fun onPause() {
@@ -232,6 +240,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             // Ignored
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        PaymentVoiceNotifier.shutdown()
     }
 
     private fun initViews() {
@@ -338,6 +351,13 @@ class MainActivity : AppCompatActivity() {
         btnTestConnectionSettings = findViewById(R.id.btnTestConnectionSettings)
         btnClearFailedStatements = findViewById(R.id.btnClearFailedStatements)
         btnClearAllStatements = findViewById(R.id.btnClearAllStatements)
+        swVoiceAlert = findViewById(R.id.swVoiceAlert)
+        btnTestVoice = findViewById(R.id.btnTestVoice)
+        swBiometricLock = findViewById(R.id.swBiometricLock)
+        btnTestBiometric = findViewById(R.id.btnTestBiometric)
+        spAutoCleanDays = findViewById(R.id.spAutoCleanDays)
+        btnClean30Days = findViewById(R.id.btnClean30Days)
+        btnRunDiagnostics = findViewById(R.id.btnRunDiagnostics)
 
         // Spinner Setup
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, daysOptions)
@@ -757,6 +777,228 @@ class MainActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+
+        // 1. Voice Alert Announcement Setup
+        swVoiceAlert.isChecked = prefs.getBoolean("voice_alert_enabled", true)
+        swVoiceAlert.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("voice_alert_enabled", isChecked).apply()
+            val msg = if (isChecked) "Voice announcements enabled" else "Voice announcements disabled"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+        btnTestVoice.setOnClickListener {
+            PaymentVoiceNotifier.speakPayment(this, "bKash", "500.00")
+            Toast.makeText(this, "Playing test voice announcement...", Toast.LENGTH_SHORT).show()
+        }
+
+        // 2. Fingerprint & Face Biometric Lock Setup
+        swBiometricLock.isChecked = AppLockManager.isLockEnabled(this)
+        swBiometricLock.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (!AppLockManager.isBiometricAvailable(this)) {
+                    swBiometricLock.isChecked = false
+                    Toast.makeText(this, "No enrolled Fingerprint or Face lock found. Please set up in device settings.", Toast.LENGTH_LONG).show()
+                } else {
+                    // Test authenticate before enabling
+                    AppLockManager.promptBiometric(
+                        activity = this,
+                        title = "Confirm Biometric Lock",
+                        subtitle = "Scan your Fingerprint or Face to enable lock",
+                        onSuccess = {
+                            AppLockManager.setLockEnabled(this, true)
+                            Toast.makeText(this, "Biometric Lock enabled successfully!", Toast.LENGTH_SHORT).show()
+                        },
+                        onError = { err ->
+                            swBiometricLock.isChecked = false
+                            Toast.makeText(this, "Authentication failed: $err", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            } else {
+                AppLockManager.setLockEnabled(this, false)
+                Toast.makeText(this, "Biometric Lock disabled", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnTestBiometric.setOnClickListener {
+            if (!AppLockManager.isBiometricAvailable(this)) {
+                Toast.makeText(this, "No enrolled Fingerprint or Face lock found.", Toast.LENGTH_SHORT).show()
+            } else {
+                AppLockManager.promptBiometric(
+                    activity = this,
+                    title = "Test Biometric Authentication",
+                    subtitle = "Verify Fingerprint or Face Lock recognition",
+                    onSuccess = {
+                        Toast.makeText(this, "✓ Biometric Recognized Successfully!", Toast.LENGTH_SHORT).show()
+                    },
+                    onError = { err ->
+                        Toast.makeText(this, "Authentication error: $err", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+        }
+
+        // 3. Auto-Purge Storage Policy Setup
+        val autoCleanOptions = arrayOf("Keep All Records (Never Purge)", "Older than 7 Days", "Older than 15 Days", "Older than 30 Days")
+        val autoCleanAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, autoCleanOptions)
+        spAutoCleanDays.adapter = autoCleanAdapter
+
+        val currentCleanDays = prefs.getInt("auto_clean_days", 0)
+        val cleanSelection = when (currentCleanDays) {
+            7 -> 1
+            15 -> 2
+            30 -> 3
+            else -> 0
+        }
+        spAutoCleanDays.setSelection(cleanSelection)
+
+        spAutoCleanDays.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val days = when (position) {
+                    1 -> 7
+                    2 -> 15
+                    3 -> 30
+                    else -> 0
+                }
+                prefs.edit().putInt("auto_clean_days", days).apply()
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        btnClean30Days.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Purge Statements Older than 30 Days")
+                .setMessage("Are you sure you want to remove local cached statements older than 30 days?")
+                .setPositiveButton("Purge Now") { _, _ ->
+                    val purged = StatementManager.cleanOlderThanDays(this, 30)
+                    renderStatements()
+                    renderMetrics()
+                    Toast.makeText(this, "Purged $purged older records", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        // 4. System Diagnostics Tool Setup
+        btnRunDiagnostics.setOnClickListener {
+            runSystemDiagnostics()
+        }
+    }
+
+    private fun showAppLockPromptIfNeeded() {
+        if (!AppLockManager.isLockEnabled(this) || AppLockManager.isSessionUnlocked) {
+            return
+        }
+
+        if (!AppLockManager.isBiometricAvailable(this)) {
+            return
+        }
+
+        AppLockManager.promptBiometric(
+            activity = this,
+            title = "M-Track Gateway Locked",
+            subtitle = "Use Fingerprint or Face Lock to access the app",
+            onSuccess = {
+                Toast.makeText(this, "Welcome to M-Track Gateway", Toast.LENGTH_SHORT).show()
+            },
+            onError = { _ ->
+                moveTaskToBack(true)
+            }
+        )
+    }
+
+    private fun runSystemDiagnostics() {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("🩺 System Health Diagnostics")
+            .setMessage("Testing system components, permissions, network & server API...")
+            .setCancelable(false)
+            .create()
+
+        progressDialog.show()
+
+        Thread {
+            // 1. SMS Permissions
+            val hasReceiveSms = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+            val hasReadSms = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+            val permSmsStatus = if (hasReceiveSms && hasReadSms) "✓ PASS (Granted)" else "✕ FAIL (Missing Permissions)"
+
+            // 2. Battery Optimization
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val isBatteryIgnored = pm.isIgnoringBatteryOptimizations(packageName)
+            val batteryStatus = if (isBatteryIgnored) "✓ PASS (Unrestricted 24/7)" else "⚠️ WARNING (Optimized by OS)"
+
+            // 3. Network & Internet Ping
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val netCaps = cm.getNetworkCapabilities(cm.activeNetwork)
+            val hasInternet = netCaps != null && netCaps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            val netStatus = if (hasInternet) "✓ PASS (Online & Connected)" else "✕ FAIL (Offline / No Connection)"
+
+            // 4. Webhook Server HTTP Ping
+            val prefs = getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
+            val webhookUrl = prefs.getString("webhook_url", "https://erp.mtrack.com.bd/api/webhook.php") ?: ""
+            val apiKey = prefs.getString("api_key", "MTRACK_SMS_SECURE_TOKEN_2026") ?: ""
+
+            var webhookStatus = "Testing..."
+            var latencyMs = -1L
+
+            try {
+                val startTime = System.currentTimeMillis()
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                val body = okhttp3.FormBody.Builder()
+                    .add("action", "test_ping")
+                    .add("api_key", apiKey)
+                    .build()
+
+                val req = okhttp3.Request.Builder()
+                    .url(webhookUrl)
+                    .addHeader("X-API-KEY", apiKey)
+                    .post(body)
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                latencyMs = System.currentTimeMillis() - startTime
+                webhookStatus = if (resp.isSuccessful) {
+                    "✓ PASS (HTTP ${resp.code} • ${latencyMs}ms)"
+                } else {
+                    "✕ FAIL (HTTP ${resp.code})"
+                }
+            } catch (e: Exception) {
+                webhookStatus = "✕ FAIL (${e.message ?: "Connection error"})"
+            }
+
+            // 5. Background Service
+            val isServiceEnabled = prefs.getBoolean("service_enabled", true)
+            val serviceStatus = if (isServiceEnabled) "✓ PASS (24/7 Running)" else "⚠️ PAUSED"
+
+            runOnUiThread {
+                progressDialog.dismiss()
+                val resultText = """
+1. SMS Permissions:
+$permSmsStatus
+
+2. Battery Saver Optimization:
+$batteryStatus
+
+3. Internet Connectivity:
+$netStatus
+
+4. Webhook Endpoint:
+$webhookStatus
+
+5. Background Relay Service:
+$serviceStatus
+                """.trimIndent()
+
+                AlertDialog.Builder(this)
+                    .setTitle("🩺 Diagnostics Result")
+                    .setMessage(resultText)
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }.start()
     }
 
     private fun triggerTestPing() {

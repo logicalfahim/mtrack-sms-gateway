@@ -19,32 +19,26 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.45">
 
-        <!-- "M" Logo -->
+        <!-- Official M Track Company Logo -->
         <ImageView
             android:id="@+id/ivSplashLogo"
-            android:layout_width="90dp"
-            android:layout_height="90dp"
+            android:layout_width="240dp"
+            android:layout_height="86dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
             android:contentDescription="M Track Logo"
-            android:src="@drawable/ic_app_logo" />
-
-        <!-- App Title -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:fontFamily="sans-serif-black"
-            android:text="M Track"
-            android:textColor="@color/text_primary"
-            android:textSize="26sp"
-            android:textStyle="bold" />
+            android:src="@drawable/mtrack_logo" />
 
         <!-- Subtitle Badge -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:letterSpacing="0.12"
+            android:layout_marginTop="8dp"
+            android:letterSpacing="0.15"
             android:text="PAYMENT GATEWAY"
+            android:textColor="@color/brand_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
             android:textColor="@color/brand_primary"
             android:textSize="12sp"
             android:textStyle="bold" />

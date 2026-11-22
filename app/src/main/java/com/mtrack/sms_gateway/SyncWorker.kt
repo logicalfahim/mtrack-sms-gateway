@@ -93,6 +93,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
 
             Log.d("SyncWorker", "Server Response: HTTP $code | $responseBody")
 
+            val resolvedSender = if (senderNumber.isNotEmpty()) senderNumber else sender
+
             return if (response.isSuccessful) {
                 if (action == "heartbeat") {
                     GatewayLogger.log(applicationContext, "Heartbeat acknowledged (HTTP $code)", "SUCCESS", "SYSTEM")
@@ -106,7 +108,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                             trxId = trxId,
                             platform = platform,
                             type = type,
-                            sender = sender,
+                            sender = resolvedSender,
                             amount = amount,
                             date = smsDate,
                             status = "SYNCED",
@@ -123,7 +125,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                         trxId = trxId,
                         platform = platform,
                         type = type,
-                        sender = sender,
+                        sender = resolvedSender,
                         amount = amount,
                         date = smsDate,
                         status = "FAILED",
@@ -136,13 +138,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
             Log.e("SyncWorker", "Network Error: ${e.message}", e)
             val errText = e.localizedMessage ?: "Connection error"
             GatewayLogger.log(applicationContext, "Network Failed: $errText", "FAILED", platform)
+            val resolvedSender = if (senderNumber.isNotEmpty()) senderNumber else sender
             if (trxId.isNotEmpty()) {
                 StatementManager.recordStatement(
                     context = applicationContext,
                     trxId = trxId,
                     platform = platform,
                     type = type,
-                    sender = sender,
+                    sender = resolvedSender,
                     amount = amount,
                     date = smsDate,
                     status = "FAILED",

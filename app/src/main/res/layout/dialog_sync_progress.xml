@@ -17,7 +17,7 @@
         <ImageView
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:src="@drawable/ic_app_logo" />
+            android:src="@drawable/mtrack_favicon" />
 
         <LinearLayout
             android:layout_width="0dp"

@@ -14,7 +14,7 @@ data class ParsedPayment(
 object PaymentFilter {
 
     private val OUTGOING_KEYWORDS = arrayOf(
-        "to bank", "to card", "cash out", "cash-out", "send money", "sent tk",
+        "to bank", "to card", "cash out", "cash-out", "send money to", "sent tk",
         "mobile recharge", "recharge", "pay bill", "payment to", "transferred to",
         "transfer to", "fee charged", "payment of tk"
     )
@@ -28,6 +28,10 @@ object PaymentFilter {
         Pattern.CASE_INSENSITIVE
     )
     private val TRX_REGEX = Pattern.compile("(?:TrxID|TxnID|Txn\\s*Id|Trx\\s*Id)[\\s:]*([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
+    private val EXPLICIT_AMOUNT_REGEX = Pattern.compile(
+        "(?:amount|total)[\\s:]*(?:Tk|BDT)?\\.?\\s*([\\d,]+\\.?\\d*)",
+        Pattern.CASE_INSENSITIVE
+    )
     private val AMOUNT_REGEX = Pattern.compile("(?:Tk|BDT)\\.?\\s*([\\d,]+\\.?\\d*)", Pattern.CASE_INSENSITIVE)
 
     fun isIncomingPayment(sender: String, body: String): Boolean {
@@ -41,12 +45,12 @@ object PaymentFilter {
         val bLower = b.lowercase()
 
         // 1. Strict Sender Verification:
-        // bKash: "bkash" or "16247"
-        // Nagad: "16167" or "nagad"
-        // Rocket: STRICTLY "16216" ONLY!
-        val isBkash = s.contains("bkash") || s == "16247"
-        val isNagad = s.contains("nagad") || s == "16167"
-        val isRocket = s == "16216" // Strictly 16216 only!
+        // bKash: "bkash" or contains "16247"
+        // Nagad: "nagad" or contains "16167" (handles +88016167, 88016167)
+        // Rocket: contains "16216"
+        val isBkash = s.contains("bkash") || s.contains("16247")
+        val isNagad = s.contains("nagad") || s.contains("16167")
+        val isRocket = s.contains("16216")
 
         if (!isBkash && !isNagad && !isRocket) {
             return ParsedPayment(false, "", "", "", "", "")
@@ -61,8 +65,8 @@ object PaymentFilter {
         // 2. Blacklist: Any Outgoing / Debit / Expense keyword instantly drops the message
         for (kw in OUTGOING_KEYWORDS) {
             if (bLower.contains(kw)) {
-                // Safeguard: "payment of tk" can appear in incoming merchant notices: "received payment of Tk ... from ..."
-                if (kw == "payment of tk" && (bLower.contains("received") || bLower.contains("from"))) {
+                // Safeguard: incoming notices can contain "payment of tk" or "send money" with "received" / "from"
+                if ((kw == "payment of tk" || kw == "send money to") && (bLower.contains("received") || bLower.contains("from"))) {
                     continue
                 }
                 return ParsedPayment(false, platform, "Debit/Outgoing", "", "", "")
@@ -70,11 +74,12 @@ object PaymentFilter {
         }
 
         // 3. Must have explicit Incoming Indicator
+        val isMoneyReceived = bLower.contains("money received") || bLower.contains("money in")
         val isCashIn = bLower.contains("cash in") || bLower.contains("cash-in")
         val isReceived = bLower.contains("received") || bLower.contains("receive") || bLower.contains("customer:")
         val isMerchantPayment = bLower.contains("payment") && (bLower.contains("received") || bLower.contains("from"))
 
-        if (!isCashIn && !isReceived && !isMerchantPayment) {
+        if (!isMoneyReceived && !isCashIn && !isReceived && !isMerchantPayment) {
             return ParsedPayment(false, platform, "", "", "", "")
         }
 
@@ -88,12 +93,17 @@ object PaymentFilter {
             return ParsedPayment(false, platform, "", "", "", "")
         }
 
-        // 5. Extract Amount
-        val amtMatcher = AMOUNT_REGEX.matcher(b)
-        val amount = if (amtMatcher.find()) {
-            amtMatcher.group(1)?.replace(",", "")?.trim() ?: "0.00"
+        // 5. Extract Amount (prioritize explicit "Amount: Tk ...")
+        val explicitAmtMatcher = EXPLICIT_AMOUNT_REGEX.matcher(b)
+        val amount = if (explicitAmtMatcher.find()) {
+            explicitAmtMatcher.group(1)?.replace(",", "")?.trim() ?: "0.00"
         } else {
-            "0.00"
+            val amtMatcher = AMOUNT_REGEX.matcher(b)
+            if (amtMatcher.find()) {
+                amtMatcher.group(1)?.replace(",", "")?.trim() ?: "0.00"
+            } else {
+                "0.00"
+            }
         }
 
         // 6. Extract Sender Mobile Number (As-Is: Full, Masked 0171***789, +88, Rocket 12-digit)
@@ -122,6 +132,7 @@ object PaymentFilter {
         val type = when {
             isCashIn -> "Agent Cash In"
             isMerchantPayment -> "Merchant Payment"
+            isMoneyReceived -> "Money Received"
             else -> "Customer Send Money"
         }
 

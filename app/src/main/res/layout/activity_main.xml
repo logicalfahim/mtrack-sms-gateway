@@ -46,7 +46,7 @@
                 <ImageView
                     android:layout_width="26dp"
                     android:layout_height="26dp"
-                    android:src="@drawable/ic_app_logo" />
+                    android:src="@drawable/mtrack_favicon" />
 
                 <TextView
                     android:id="@+id/tvHeaderTitle"
@@ -1225,6 +1225,206 @@
                             app:cornerRadius="8dp"
                             app:strokeColor="@color/status_danger" />
                     </LinearLayout>
+
+                    <!-- Voice & Audio Announcements Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="🔊 Voice Payment Announcement"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Read aloud received payment amounts when SMS arrives"
+                                    android:textColor="@color/text_muted"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/swVoiceAlert"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btnTestVoice"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:text="🔊 Test Voice Announcement"
+                            android:textColor="@color/brand_primary"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="@color/brand_primary" />
+                    </LinearLayout>
+
+                    <!-- App Security & Biometric Lock Card (Fingerprint & Face) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="👆 Fingerprint &amp; Face Lock"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Require Fingerprint or Face biometric to open gateway"
+                                    android:textColor="@color/text_muted"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/swBiometricLock"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btnTestBiometric"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:text="👆 Test Biometric Authentication"
+                            android:textColor="@color/brand_primary"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="@color/brand_primary" />
+                    </LinearLayout>
+
+                    <!-- Smart Auto-Clean Storage Policy Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="⏱️ Auto-Purge Storage Policy"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Keep device fast by auto-clearing older cached records."
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+
+                        <Spinner
+                            android:id="@+id/spAutoCleanDays"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="8dp" />
+
+                        <Button
+                            android:id="@+id/btnClean30Days"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:text="🗑️ Purge Records Older Than 30 Days"
+                            android:textColor="@color/status_warning"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="@color/status_warning" />
+                    </LinearLayout>
+
+                    <!-- Diagnostics & System Health Tool Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_card_flat"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="🩺 System Health &amp; Diagnostics"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Test permissions, network latency, webhook API health &amp; battery"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+
+                        <Button
+                            android:id="@+id/btnRunDiagnostics"
+                            android:layout_width="match_parent"
+                            android:layout_height="42dp"
+                            android:layout_marginTop="12dp"
+                            android:backgroundTint="@color/brand_primary"
+                            android:text="🩺 Run Full System Diagnostics"
+                            android:textColor="@color/white"
+                            android:textSize="12sp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
                 </LinearLayout>
             </ScrollView>
 
@@ -1256,9 +1456,11 @@
                         android:padding="20dp">
 
                         <ImageView
-                            android:layout_width="54dp"
-                            android:layout_height="54dp"
-                            android:src="@drawable/ic_app_logo" />
+                            android:layout_width="180dp"
+                            android:layout_height="64dp"
+                            android:adjustViewBounds="true"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/mtrack_logo" />
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -1635,9 +1837,9 @@
             android:padding="20dp">
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/ic_app_logo" />
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:src="@drawable/mtrack_favicon" />
 
             <TextView
                 android:layout_width="wrap_content"

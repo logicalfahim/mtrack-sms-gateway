@@ -16,12 +16,34 @@ data class PaymentStatement(
     val rawMessage: String = ""
 )
 
+object DeduplicationManager {
+    private val seenTrxIds = java.util.Collections.synchronizedSet(java.util.LinkedHashSet<String>())
+
+    fun markIfNew(trxId: String): Boolean {
+        if (trxId.isEmpty()) return false
+        synchronized(seenTrxIds) {
+            if (seenTrxIds.contains(trxId)) {
+                return false
+            }
+            seenTrxIds.add(trxId)
+            if (seenTrxIds.size > 500) {
+                val it = seenTrxIds.iterator()
+                if (it.hasNext()) {
+                    it.next()
+                    it.remove()
+                }
+            }
+            return true
+        }
+    }
+}
+
 object StatementManager {
 
     const val ACTION_STATEMENTS_UPDATED = "com.mtrack.sms_gateway.ACTION_STATEMENTS_UPDATED"
     private const val PREFS_NAME = "MTrackStatements"
     private const val KEY_STATEMENTS = "statement_list"
-    private const val MAX_STATEMENTS = 200
+    private const val MAX_STATEMENTS = 1000
 
     fun recordStatement(
         context: Context,
@@ -40,19 +62,30 @@ object StatementManager {
 
             // Check if already exists by TrxID to prevent duplicates
             var existingIndex = -1
+            var existingSender = ""
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 if (obj.optString("trxId") == trxId && trxId.isNotEmpty()) {
                     existingIndex = i
+                    existingSender = obj.optString("sender", "")
                     break
                 }
+            }
+
+            // Always preserve customer phone/account over generic operator labels
+            val finalSender = if (sender.isNotEmpty() && !sender.equals("bKash", ignoreCase = true) && !sender.equals("Nagad", ignoreCase = true) && !sender.equals("16216", ignoreCase = true)) {
+                sender
+            } else if (existingSender.isNotEmpty()) {
+                existingSender
+            } else {
+                sender
             }
 
             val entry = JSONObject().apply {
                 put("trxId", trxId)
                 put("platform", platform)
                 put("type", type)
-                put("sender", sender)
+                put("sender", finalSender)
                 put("amount", amount)
                 put("date", date)
                 put("status", status)
@@ -129,6 +162,43 @@ object StatementManager {
             }
             prefs.edit().putString(KEY_STATEMENTS, newArray.toString()).apply()
             context.sendBroadcast(Intent(ACTION_STATEMENTS_UPDATED))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return removedCount
+    }
+
+    fun cleanOlderThanDays(context: Context, days: Int): Int {
+        if (days <= 0) return 0
+        var removedCount = 0
+        try {
+            val cutoffMillis = System.currentTimeMillis() - (days.toLong() * 24L * 60L * 60L * 1000L)
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val jsonArray = JSONArray(prefs.getString(KEY_STATEMENTS, "[]") ?: "[]")
+            val newArray = JSONArray()
+
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val dateStr = obj.optString("date", "")
+                val recordTime = try {
+                    dateFormat.parse(dateStr)?.time ?: System.currentTimeMillis()
+                } catch (e: Exception) {
+                    System.currentTimeMillis()
+                }
+
+                if (recordTime >= cutoffMillis) {
+                    newArray.put(obj)
+                } else {
+                    removedCount++
+                }
+            }
+
+            if (removedCount > 0) {
+                prefs.edit().putString(KEY_STATEMENTS, newArray.toString()).apply()
+                context.sendBroadcast(Intent(ACTION_STATEMENTS_UPDATED))
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

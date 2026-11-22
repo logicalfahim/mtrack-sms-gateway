@@ -6,6 +6,7 @@
     <color name="brand_primary_light">#1b68db</color>
     <color name="brand_primary_subtle">#EEF4FD</color>
     <color name="brand_accent">#10B981</color>
+    <color name="brand_accent_gold">#F09018</color>
     
     <!-- Clean Light Theme Backgrounds (Flat, No Shadows) -->
     <color name="bg_app">#F8FAFC</color>
