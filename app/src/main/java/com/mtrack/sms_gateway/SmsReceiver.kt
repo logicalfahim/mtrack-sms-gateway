@@ -7,6 +7,7 @@ import android.provider.Telephony
 import android.util.Log
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -16,82 +17,102 @@ class SmsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
-            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            val simSlot = detectSimSlot(intent)
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val pendingResult = goAsync()
+            val appContext = context.applicationContext ?: context
 
-            for (sms in messages) {
-                val sender = sms.displayOriginatingAddress ?: ""
-                val messageBody = sms.messageBody ?: ""
-
-                if (sender.isEmpty() || messageBody.isEmpty()) continue
-
-                // 1. Strict Incoming Payment Filter
-                // Drops any outgoing SMS (e.g. bKash to Bank, Cash Out) and non-bKash/Nagad/Rocket SMS
-                // Rocket is strictly sender 16216
-                val parsed = PaymentFilter.parse(sender, messageBody)
-                if (!parsed.isValid || parsed.trxId.isEmpty()) {
-                    Log.d("SmsReceiver", "Ignored non-incoming/non-payment SMS from: $sender")
-                    continue
+            Thread {
+                try {
+                    processIncomingSms(appContext, intent)
+                } catch (e: Exception) {
+                    Log.e("SmsReceiver", "Error processing incoming SMS: ${e.message}", e)
+                } finally {
+                    try {
+                        pendingResult.finish()
+                    } catch (e: Exception) {
+                        Log.e("SmsReceiver", "Error finishing pendingResult: ${e.message}")
+                    }
                 }
+            }.start()
+        }
+    }
 
-                // Check deduplication (avoids double-sync if ContentObserver also catches this SMS)
-                if (!DeduplicationManager.markIfNew(parsed.trxId)) {
-                    Log.d("SmsReceiver", "Skipping duplicate TrxID: ${parsed.trxId}")
-                    continue
-                }
+    private fun processIncomingSms(context: Context, intent: Intent) {
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        val simSlot = detectSimSlot(intent)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
-                val timestamp = if (sms.timestampMillis > 0) sms.timestampMillis else System.currentTimeMillis()
-                val formattedDate = dateFormat.format(Date(timestamp))
-                val resolvedSender = if (parsed.senderNumber.isNotEmpty()) parsed.senderNumber else sender
+        for (sms in messages) {
+            val sender = sms.displayOriginatingAddress ?: ""
+            val messageBody = sms.messageBody ?: ""
 
-                Log.d("SmsReceiver", "Incoming Payment: ${parsed.platform} [${parsed.type}, Trx: ${parsed.trxId}, Tk ${parsed.amount}]")
+            if (sender.isEmpty() || messageBody.isEmpty()) continue
 
-                // Immediately log in Live Terminal
-                GatewayLogger.log(
-                    context,
-                    "${parsed.platform} (${parsed.type}): Tk ${parsed.amount} [Trx: ${parsed.trxId}]",
-                    "INFO",
-                    parsed.platform
-                )
-
-                // Announce payment via voice/audio alert
-                PaymentVoiceNotifier.speakPayment(context, parsed.platform, parsed.amount)
-
-                // Record in Statements Ledger as PENDING
-                StatementManager.recordStatement(
-                    context = context,
-                    trxId = parsed.trxId,
-                    platform = parsed.platform,
-                    type = parsed.type,
-                    sender = resolvedSender,
-                    amount = parsed.amount,
-                    date = formattedDate,
-                    status = "PENDING",
-                    rawMessage = messageBody
-                )
-
-                // Enqueue background sync worker
-                val inputData = Data.Builder()
-                    .putString("sender", sender)
-                    .putString("sender_number", parsed.senderNumber)
-                    .putString("message", messageBody)
-                    .putString("platform", parsed.platform)
-                    .putString("type", parsed.type)
-                    .putString("trx_id", parsed.trxId)
-                    .putString("amount", parsed.amount)
-                    .putString("sms_date", formattedDate)
-                    .putString("sms_timestamp", timestamp.toString())
-                    .putInt("sim_slot", simSlot)
-                    .putString("action", "realtime_sms")
-                    .build()
-
-                val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-                    .setInputData(inputData)
-                    .build()
-
-                WorkManager.getInstance(context).enqueue(workRequest)
+            // 1. Strict Incoming Payment Filter
+            // Drops any outgoing SMS (e.g. bKash to Bank, Cash Out) and non-bKash/Nagad/Rocket SMS
+            // Rocket is strictly sender 16216
+            val parsed = PaymentFilter.parse(sender, messageBody)
+            if (!parsed.isValid || parsed.trxId.isEmpty()) {
+                Log.d("SmsReceiver", "Ignored non-incoming/non-payment SMS from: $sender")
+                continue
             }
+
+            // Check deduplication (avoids double-sync if ContentObserver also catches this SMS)
+            if (!DeduplicationManager.markIfNew(parsed.trxId)) {
+                Log.d("SmsReceiver", "Skipping duplicate TrxID: ${parsed.trxId}")
+                continue
+            }
+
+            val timestamp = if (sms.timestampMillis > 0) sms.timestampMillis else System.currentTimeMillis()
+            val formattedDate = dateFormat.format(Date(timestamp))
+            val resolvedSender = if (parsed.senderNumber.isNotEmpty()) parsed.senderNumber else sender
+
+            Log.d("SmsReceiver", "Incoming Payment: ${parsed.platform} [${parsed.type}, Trx: ${parsed.trxId}, Tk ${parsed.amount}]")
+
+            // Immediately log in Live Terminal
+            GatewayLogger.log(
+                context,
+                "${parsed.platform} (${parsed.type}): Tk ${parsed.amount} [Trx: ${parsed.trxId}]",
+                "INFO",
+                parsed.platform
+            )
+
+            // Announce payment via voice/audio alert
+            PaymentVoiceNotifier.speakPayment(context, parsed.platform, parsed.amount)
+
+            // Record in Statements Ledger as PENDING
+            StatementManager.recordStatement(
+                context = context,
+                trxId = parsed.trxId,
+                platform = parsed.platform,
+                type = parsed.type,
+                sender = resolvedSender,
+                amount = parsed.amount,
+                date = formattedDate,
+                status = "PENDING",
+                rawMessage = messageBody
+            )
+
+            // Enqueue background sync worker with Expedited execution
+            val inputData = Data.Builder()
+                .putString("sender", sender)
+                .putString("sender_number", parsed.senderNumber)
+                .putString("message", messageBody)
+                .putString("platform", parsed.platform)
+                .putString("type", parsed.type)
+                .putString("trx_id", parsed.trxId)
+                .putString("amount", parsed.amount)
+                .putString("sms_date", formattedDate)
+                .putString("sms_timestamp", timestamp.toString())
+                .putInt("sim_slot", simSlot)
+                .putString("action", "realtime_sms")
+                .build()
+
+            val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setInputData(inputData)
+                .build()
+
+            WorkManager.getInstance(context).enqueue(workRequest)
         }
     }
 

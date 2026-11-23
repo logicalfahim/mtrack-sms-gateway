@@ -24,6 +24,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -200,6 +201,7 @@ class GatewayService : android.app.Service() {
                         .build()
 
                     val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                        .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                         .setInputData(inputData)
                         .build()
 
@@ -219,29 +221,29 @@ class GatewayService : android.app.Service() {
         val prefs = getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("service_enabled", true)) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-                        .setInputData(Data.Builder().putString("action", "heartbeat").build())
-                        .build()
-                    WorkManager.getInstance(applicationContext).enqueue(workRequest)
-                } else {
-                    val restartIntent = Intent(applicationContext, GatewayService::class.java).apply {
-                        setPackage(packageName)
-                    }
-                    val restartPendingIntent = PendingIntent.getService(
-                        applicationContext,
-                        101,
-                        restartIntent,
-                        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-                    alarmManager?.set(
-                        android.app.AlarmManager.ELAPSED_REALTIME,
-                        android.os.SystemClock.elapsedRealtime() + 1000,
-                        restartPendingIntent
-                    )
+                val restartIntent = Intent(applicationContext, GatewayService::class.java).apply {
+                    setPackage(packageName)
                 }
-                GatewayLogger.log(applicationContext, "App closed from Recents: Background Service kept active", "INFO", "SYSTEM")
+                val restartPendingIntent = PendingIntent.getService(
+                    applicationContext,
+                    101,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+                alarmManager?.set(
+                    android.app.AlarmManager.ELAPSED_REALTIME,
+                    android.os.SystemClock.elapsedRealtime() + 1000,
+                    restartPendingIntent
+                )
+
+                val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    .setInputData(Data.Builder().putString("action", "heartbeat").build())
+                    .build()
+                WorkManager.getInstance(applicationContext).enqueue(workRequest)
+
+                GatewayLogger.log(applicationContext, "App removed from Recents: 24/7 Service auto-preserved", "INFO", "SYSTEM")
             } catch (e: Exception) {
                 Log.e("GatewayService", "onTaskRemoved error: ${e.message}")
             }
@@ -337,6 +339,7 @@ class GatewayService : android.app.Service() {
                     .build()
 
                 val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                     .setInputData(inputData)
                     .build()
 
@@ -397,6 +400,7 @@ class GatewayService : android.app.Service() {
             .build()
 
         val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setInputData(inputData)
             .build()
 

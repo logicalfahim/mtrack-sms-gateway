@@ -50,6 +50,7 @@
             android:name=".GatewayService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="dataSync" />
 
         <!-- Realtime SMS Broadcast Receiver -->

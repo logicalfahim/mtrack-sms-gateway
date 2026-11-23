@@ -9,6 +9,10 @@ import android.os.BatteryManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import androidx.core.app.NotificationCompat
+import androidx.work.ForegroundInfo
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import okhttp3.FormBody
@@ -17,6 +21,29 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+
+    override fun getForegroundInfo(): ForegroundInfo {
+        val channelId = GatewayService.CHANNEL_ID
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (notificationManager?.getNotificationChannel(channelId) == null) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "M-Track SMS Relay Service",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                notificationManager?.createNotificationChannel(channel)
+            }
+        }
+        val notification = NotificationCompat.Builder(applicationContext, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("M-Track SMS Gateway")
+            .setContentText("Syncing transaction with server...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        return ForegroundInfo(1002, notification)
+    }
 
     override fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("GatewayPrefs", Context.MODE_PRIVATE)
